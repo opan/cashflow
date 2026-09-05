@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -55,11 +56,12 @@ func buildTemplates() map[string]*template.Template {
 		"rupiah": formatRupiah,
 		"tgl":    formatTanggal,
 		"add1":   func(i int) int { return i + 1 },
+		"iso":    func(t time.Time) string { return t.Format("2006-01-02") },
 	}
 	pages := map[string]*template.Template{}
 	// Each page gets its own template set (layout + partials + that page) so
 	// their "content"/"title" blocks don't collide.
-	for _, name := range []string{"landing", "login", "register", "dashboard", "manage", "view", "laporan", "notfound"} {
+	for _, name := range []string{"landing", "login", "register", "dashboard", "manage", "view", "laporan", "edit", "versions", "notfound"} {
 		t := template.New(name).Funcs(funcs)
 		t = template.Must(t.ParseFS(tmplFS,
 			"templates/layout.html",
@@ -149,6 +151,7 @@ type HistoryView struct {
 	PrevURL    string // "" when there is no previous page
 	NextURL    string // "" when there is no next page
 	BasePath   string // "/kelola/{slug}" or "/p/{slug}", the search form target
+	Owner      bool   // owner view → show edit links
 }
 
 func historyURL(basePath, q string, page int) string {
@@ -165,7 +168,7 @@ func historyURL(basePath, q string, page int) string {
 	return basePath
 }
 
-func buildHistoryView(ep EntryPage, q, basePath string) HistoryView {
+func buildHistoryView(ep EntryPage, q, basePath string, owner bool) HistoryView {
 	hv := HistoryView{
 		Entries:    ep.Entries,
 		Query:      q,
@@ -173,6 +176,7 @@ func buildHistoryView(ep EntryPage, q, basePath string) HistoryView {
 		TotalPages: ep.TotalPages,
 		Total:      ep.Total,
 		BasePath:   basePath,
+		Owner:      owner,
 	}
 	if ep.Page > 1 {
 		hv.PrevURL = historyURL(basePath, q, ep.Page-1)
@@ -189,15 +193,80 @@ type authVM struct {
 }
 
 type reportVM struct {
-	Plan       *CashPlan
-	Summary    Summary
-	Payers     []PayerTotal
-	Expenses   []Entry
-	Period     string
-	Generated  time.Time
-	Keterangan string
-	ShareURL   string
-	Public     bool // true when rendered from the public /p/ route
+	Plan        *CashPlan
+	Summary     Summary
+	Income      Matrix // weekly matrix: pembayar × minggu
+	Expense     Matrix // weekly matrix: penerima × minggu
+	Expenses    []Entry
+	PeriodLabel string
+	FromInput   string // YYYY-MM-DD for the range form
+	ToInput     string
+	Generated   time.Time
+	Keterangan  string
+	ShareURL    string
+	Public      bool   // true when rendered from the public /p/ route
+	BasePath    string // "/kelola/{slug}" or "/p/{slug}"
+}
+
+// Matrix is a party × week grid of amounts with row/column totals.
+type Matrix struct {
+	Cols      []string
+	Rows      []MatrixRow
+	ColTotals []int64
+	Grand     int64
+}
+
+type MatrixRow struct {
+	Party string
+	Cells []int64
+	Total int64
+}
+
+func (m Matrix) HasData() bool { return len(m.Rows) > 0 }
+
+// buildMatrix pivots per-(party, week) totals into a grid: weeks as columns
+// (chronological), parties as rows (largest total first), with totals.
+func buildMatrix(cells []WeekCell) Matrix {
+	var weeks []time.Time
+	seen := map[time.Time]bool{}
+	for _, c := range cells {
+		if !seen[c.Week] {
+			seen[c.Week] = true
+			weeks = append(weeks, c.Week)
+		}
+	}
+	sort.Slice(weeks, func(i, j int) bool { return weeks[i].Before(weeks[j]) })
+	idx := make(map[time.Time]int, len(weeks))
+	cols := make([]string, len(weeks))
+	for i, w := range weeks {
+		idx[w] = i
+		cols[i] = weekLabel(w)
+	}
+
+	rows := map[string]*MatrixRow{}
+	var order []string
+	for _, c := range cells {
+		row := rows[c.Party]
+		if row == nil {
+			row = &MatrixRow{Party: c.Party, Cells: make([]int64, len(cols))}
+			rows[c.Party] = row
+			order = append(order, c.Party)
+		}
+		row.Cells[idx[c.Week]] += c.Total
+		row.Total += c.Total
+	}
+
+	m := Matrix{Cols: cols, ColTotals: make([]int64, len(cols))}
+	for _, p := range order {
+		row := rows[p]
+		for i, v := range row.Cells {
+			m.ColTotals[i] += v
+		}
+		m.Grand += row.Total
+		m.Rows = append(m.Rows, *row)
+	}
+	sort.Slice(m.Rows, func(i, j int) bool { return m.Rows[i].Total > m.Rows[j].Total })
+	return m
 }
 
 // --- Home / landing / dashboard ---
@@ -406,7 +475,7 @@ func (a *App) renderManage(w http.ResponseWriter, r *http.Request, plan *CashPla
 		Plan:     plan,
 		Summary:  sum,
 		Payers:   payers,
-		History:  buildHistoryView(ep, q, "/kelola/"+plan.Slug),
+		History:  buildHistoryView(ep, q, "/kelola/"+plan.Slug, true),
 		ShareURL: baseURL(r) + "/p/" + plan.Slug,
 		Today:    time.Now().In(jakarta).Format("2006-01-02"),
 		Uploads:  a.nc.Enabled(),
@@ -467,7 +536,7 @@ func (a *App) handleAddEntry(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			attURL, attName = url, name
-		} else if !errors.Is(err, http.ErrMissingFile) {
+		} else if !errors.Is(err, http.ErrMissingFile) && !errors.Is(err, http.ErrNotMultipart) {
 			a.renderManage(w, r, plan, "Berkas bukti tidak dapat dibaca.")
 			return
 		}
@@ -525,7 +594,7 @@ func (a *App) handleView(w http.ResponseWriter, r *http.Request) {
 		Plan:     plan,
 		Summary:  sum,
 		Payers:   payers,
-		History:  buildHistoryView(ep, q, "/p/"+plan.Slug),
+		History:  buildHistoryView(ep, q, "/p/"+plan.Slug, false),
 		ShareURL: baseURL(r) + "/p/" + plan.Slug,
 	})
 }
@@ -551,30 +620,53 @@ func (a *App) handleViewReport(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) renderReport(w http.ResponseWriter, r *http.Request, plan *CashPlan, public bool) {
 	ctx := r.Context()
-	sum, _ := a.store.SummaryFor(ctx, plan.ID)
-	payers, _ := a.store.PayerBreakdown(ctx, plan.ID)
-	expenses, _ := a.store.ExpensesFor(ctx, plan.ID)
-	start, end, ok, _ := a.store.PlanPeriod(ctx, plan.ID)
 
-	period := "—"
-	if ok {
-		if start.Year() == end.Year() && start.Month() == end.Month() {
-			period = formatBulanTahun(start)
-		} else {
-			period = formatBulanTahun(start) + " – " + formatBulanTahun(end)
+	// Default range = the plan's full span; fall back to the current month when
+	// there are no entries. Overridable via ?from= & ?to=.
+	from, to, ok, _ := a.store.PlanPeriod(ctx, plan.ID)
+	if !ok {
+		now := time.Now().In(jakarta)
+		from = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, jakarta)
+		to = now
+	}
+	if v := r.URL.Query().Get("from"); v != "" {
+		if t, e := time.ParseInLocation("2006-01-02", v, jakarta); e == nil {
+			from = t
 		}
+	}
+	if v := r.URL.Query().Get("to"); v != "" {
+		if t, e := time.ParseInLocation("2006-01-02", v, jakarta); e == nil {
+			to = t
+		}
+	}
+	if to.Before(from) {
+		from, to = to, from
+	}
+
+	sum, _ := a.store.SummaryForRange(ctx, plan.ID, from, to)
+	incomeCells, _ := a.store.WeeklyBreakdown(ctx, plan.ID, "income", from, to)
+	expenseCells, _ := a.store.WeeklyBreakdown(ctx, plan.ID, "expense", from, to)
+	expenses, _ := a.store.ExpensesForRange(ctx, plan.ID, from, to)
+
+	base := "/p/" + plan.Slug
+	if !public {
+		base = "/kelola/" + plan.Slug
 	}
 
 	a.render(w, r, "laporan", reportVM{
-		Plan:       plan,
-		Summary:    sum,
-		Payers:     payers,
-		Expenses:   expenses,
-		Period:     period,
-		Generated:  time.Now().In(jakarta),
-		Keterangan: buildKeterangan(sum),
-		ShareURL:   baseURL(r) + "/p/" + plan.Slug,
-		Public:     public,
+		Plan:        plan,
+		Summary:     sum,
+		Income:      buildMatrix(incomeCells),
+		Expense:     buildMatrix(expenseCells),
+		Expenses:    expenses,
+		PeriodLabel: formatTanggal(from) + " – " + formatTanggal(to),
+		FromInput:   from.Format("2006-01-02"),
+		ToInput:     to.Format("2006-01-02"),
+		Generated:   time.Now().In(jakarta),
+		Keterangan:  buildKeterangan(sum),
+		ShareURL:    baseURL(r) + "/p/" + plan.Slug,
+		Public:      public,
+		BasePath:    base,
 	})
 }
 
@@ -589,6 +681,108 @@ func buildKeterangan(s Summary) string {
 	default:
 		return "Dana terpakai seluruhnya; saldo akhir nihil (Rp 0)."
 	}
+}
+
+// --- Edit an entry (party/description/date) + version history ---
+
+type editVM struct {
+	Plan  *CashPlan
+	Entry *Entry
+	Today string
+	Err   string
+}
+
+type entryDetailVM struct {
+	Plan      *CashPlan
+	Entry     *Entry
+	Revisions []Revision
+	BasePath  string
+	Owner     bool
+}
+
+func (a *App) handleEditEntryForm(w http.ResponseWriter, r *http.Request) {
+	plan := a.ownedPlan(w, r)
+	if plan == nil {
+		return
+	}
+	entry, err := a.store.EntryByID(r.Context(), r.PathValue("id"))
+	if err != nil || entry.CashplanID != plan.ID {
+		a.notFound(w, r)
+		return
+	}
+	a.render(w, r, "edit", editVM{Plan: plan, Entry: entry, Today: time.Now().In(jakarta).Format("2006-01-02")})
+}
+
+func (a *App) handleEditEntry(w http.ResponseWriter, r *http.Request) {
+	plan := a.ownedPlan(w, r)
+	if plan == nil {
+		return
+	}
+	entry, err := a.store.EntryByID(r.Context(), r.PathValue("id"))
+	if err != nil || entry.CashplanID != plan.ID {
+		a.notFound(w, r)
+		return
+	}
+	limitBody(w, r, maxFormBytes)
+	party := strings.TrimSpace(r.FormValue("party"))
+	desc := strings.TrimSpace(r.FormValue("description"))
+	date := parseDate(r.FormValue("date"))
+
+	fail := func(msg string) {
+		e := *entry // keep entered values on the form
+		e.Party, e.Description, e.OccurredAt = party, desc, date
+		a.render(w, r, "edit", editVM{Plan: plan, Entry: &e, Today: time.Now().In(jakarta).Format("2006-01-02"), Err: msg})
+	}
+	switch {
+	case entry.IsIncome() && party == "":
+		fail("Pembayar wajib diisi.")
+		return
+	case !entry.IsIncome() && desc == "":
+		fail("Keterangan wajib diisi.")
+		return
+	case tooLong(party, maxPartyLen):
+		fail("Nama terlalu panjang (maksimal 200 karakter).")
+		return
+	case tooLong(desc, maxDescLen):
+		fail("Keterangan terlalu panjang (maksimal 1000 karakter).")
+		return
+	}
+	if _, err := a.store.EditEntry(r.Context(), entry.ID, plan.ID, party, desc, date); err != nil {
+		log.Printf("edit entry: %v", err)
+		fail("Gagal menyimpan perubahan.")
+		return
+	}
+	http.Redirect(w, r, "/kelola/"+plan.Slug+"/entry/"+entry.ID, http.StatusSeeOther)
+}
+
+func (a *App) handleManageEntryDetail(w http.ResponseWriter, r *http.Request) {
+	plan := a.ownedPlan(w, r)
+	if plan == nil {
+		return
+	}
+	a.renderEntryDetail(w, r, plan, "/kelola/"+plan.Slug, true)
+}
+
+func (a *App) handleViewEntryDetail(w http.ResponseWriter, r *http.Request) {
+	plan, err := a.store.PlanBySlug(r.Context(), r.PathValue("slug"))
+	if err != nil {
+		a.notFound(w, r)
+		return
+	}
+	a.renderEntryDetail(w, r, plan, "/p/"+plan.Slug, false)
+}
+
+func (a *App) renderEntryDetail(w http.ResponseWriter, r *http.Request, plan *CashPlan, basePath string, owner bool) {
+	entry, err := a.store.EntryByID(r.Context(), r.PathValue("id"))
+	if err != nil || entry.CashplanID != plan.ID {
+		a.notFound(w, r)
+		return
+	}
+	revs, err := a.store.EntryRevisions(r.Context(), entry.ID)
+	if err != nil {
+		log.Printf("entry revisions: %v", err)
+	}
+	a.render(w, r, "versions", entryDetailVM{Plan: plan, Entry: entry, Revisions: revs, BasePath: basePath, Owner: owner})
 }
 
 // --- Helpers ---

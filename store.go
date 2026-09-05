@@ -39,6 +39,7 @@ type CashPlan struct {
 
 type Entry struct {
 	ID             string
+	CashplanID     string // populated by EntryByID (for ownership checks)
 	Type           string // "income" | "expense"
 	Party          string // income: payer; expense: payee
 	Description    string
@@ -47,10 +48,19 @@ type Entry struct {
 	CreatedAt      time.Time
 	AttachmentURL  string // public Nextcloud share link, or ""
 	AttachmentName string // original filename, for display
+	Edited         bool   // has at least one revision
 }
 
 func (e Entry) IsIncome() bool      { return e.Type == "income" }
 func (e Entry) HasAttachment() bool { return e.AttachmentURL != "" }
+
+// Revision is a past value of an entry's editable fields (append-only history).
+type Revision struct {
+	Party       string
+	Description string
+	OccurredAt  time.Time
+	RevisedAt   time.Time
+}
 
 type Summary struct {
 	TotalIncome  int64
@@ -262,7 +272,8 @@ func (s *Store) EntriesPage(ctx context.Context, planID, q string, page int) (En
 	}
 
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, type, party, description, amount, occurred_at, created_at, attachment_url, attachment_name
+		`SELECT id, type, party, description, amount, occurred_at, created_at, attachment_url, attachment_name,
+		        EXISTS(SELECT 1 FROM entry_revisions r WHERE r.entry_id = entries.id)
 		 FROM entries
 		 WHERE cashplan_id = $1
 		   AND (party ILIKE $2 ESCAPE '\' OR description ILIKE $2 ESCAPE '\')
@@ -278,7 +289,7 @@ func (s *Store) EntriesPage(ctx context.Context, planID, q string, page int) (En
 	for rows.Next() {
 		var e Entry
 		if err := rows.Scan(&e.ID, &e.Type, &e.Party, &e.Description,
-			&e.Amount, &e.OccurredAt, &e.CreatedAt, &e.AttachmentURL, &e.AttachmentName); err != nil {
+			&e.Amount, &e.OccurredAt, &e.CreatedAt, &e.AttachmentURL, &e.AttachmentName, &e.Edited); err != nil {
 			return EntryPage{}, err
 		}
 		out = append(out, e)
@@ -376,4 +387,132 @@ func (s *Store) PlanPeriod(ctx context.Context, planID string) (start, end time.
 		return time.Time{}, time.Time{}, false, nil
 	}
 	return *mn, *mx, true, nil
+}
+
+// --- Edits & version history ---
+
+// EntryByID returns the current entry (with its cashplan_id, for ownership checks).
+func (s *Store) EntryByID(ctx context.Context, entryID string) (*Entry, error) {
+	e := &Entry{}
+	err := s.pool.QueryRow(ctx,
+		`SELECT id, cashplan_id, type, party, description, amount, occurred_at, created_at,
+		        attachment_url, attachment_name,
+		        EXISTS(SELECT 1 FROM entry_revisions r WHERE r.entry_id = entries.id)
+		 FROM entries WHERE id = $1`, entryID,
+	).Scan(&e.ID, &e.CashplanID, &e.Type, &e.Party, &e.Description, &e.Amount,
+		&e.OccurredAt, &e.CreatedAt, &e.AttachmentURL, &e.AttachmentName, &e.Edited)
+	if err != nil {
+		return nil, err
+	}
+	return e, nil
+}
+
+// EditEntry updates the editable fields. The DB trigger snapshots the previous
+// values into entry_revisions and rejects any change to amount/type/attachment.
+// The cashplan_id predicate enforces ownership. Returns rows affected.
+func (s *Store) EditEntry(ctx context.Context, entryID, planID, party, desc string, occurred time.Time) (int64, error) {
+	ct, err := s.pool.Exec(ctx,
+		`UPDATE entries SET party = $1, description = $2, occurred_at = $3
+		 WHERE id = $4 AND cashplan_id = $5`,
+		party, desc, occurred.Format("2006-01-02"), entryID, planID)
+	return ct.RowsAffected(), err
+}
+
+// EntryRevisions returns an entry's past values, newest first.
+func (s *Store) EntryRevisions(ctx context.Context, entryID string) ([]Revision, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT party, description, occurred_at, revised_at
+		 FROM entry_revisions WHERE entry_id = $1
+		 ORDER BY revised_at DESC`, entryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Revision
+	for rows.Next() {
+		var r Revision
+		if err := rows.Scan(&r.Party, &r.Description, &r.OccurredAt, &r.RevisedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// --- Report over a date range ---
+
+func ymd(t time.Time) string { return t.Format("2006-01-02") }
+
+func (s *Store) SummaryForRange(ctx context.Context, planID string, from, to time.Time) (Summary, error) {
+	var sm Summary
+	err := s.pool.QueryRow(ctx,
+		`SELECT
+		   COALESCE(SUM(amount) FILTER (WHERE type = 'income'), 0),
+		   COALESCE(SUM(amount) FILTER (WHERE type = 'expense'), 0),
+		   COUNT(DISTINCT party) FILTER (WHERE type = 'income' AND party <> ''),
+		   COUNT(*)
+		 FROM entries
+		 WHERE cashplan_id = $1 AND occurred_at BETWEEN $2 AND $3`,
+		planID, ymd(from), ymd(to),
+	).Scan(&sm.TotalIncome, &sm.TotalExpense, &sm.PayerCount, &sm.EntryCount)
+	if err != nil {
+		return sm, err
+	}
+	sm.Balance = sm.TotalIncome - sm.TotalExpense
+	return sm, nil
+}
+
+func (s *Store) ExpensesForRange(ctx context.Context, planID string, from, to time.Time) ([]Entry, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, type, party, description, amount, occurred_at, created_at, attachment_url, attachment_name
+		 FROM entries
+		 WHERE cashplan_id = $1 AND type = 'expense' AND occurred_at BETWEEN $2 AND $3
+		 ORDER BY occurred_at ASC, created_at ASC`,
+		planID, ymd(from), ymd(to))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Entry
+	for rows.Next() {
+		var e Entry
+		if err := rows.Scan(&e.ID, &e.Type, &e.Party, &e.Description,
+			&e.Amount, &e.OccurredAt, &e.CreatedAt, &e.AttachmentURL, &e.AttachmentName); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// WeekCell is one (party, week) total, for the weekly breakdown matrix.
+type WeekCell struct {
+	Party string
+	Week  time.Time // Monday of the ISO week
+	Total int64
+}
+
+// WeeklyBreakdown returns per-party weekly totals for one type within a range.
+func (s *Store) WeeklyBreakdown(ctx context.Context, planID, typ string, from, to time.Time) ([]WeekCell, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT party, date_trunc('week', occurred_at)::date AS wk, SUM(amount)
+		 FROM entries
+		 WHERE cashplan_id = $1 AND type = $2 AND party <> ''
+		   AND occurred_at BETWEEN $3 AND $4
+		 GROUP BY party, wk
+		 ORDER BY party, wk`,
+		planID, typ, ymd(from), ymd(to))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []WeekCell
+	for rows.Next() {
+		var c WeekCell
+		if err := rows.Scan(&c.Party, &c.Week, &c.Total); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }

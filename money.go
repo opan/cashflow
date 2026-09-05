@@ -75,3 +75,8 @@ var bulanFullID = [...]string{"", "Januari", "Februari", "Maret", "April", "Mei"
 func formatBulanTahun(t time.Time) string {
 	return fmt.Sprintf("%s %d", bulanFullID[int(t.Month())], t.Year())
 }
+
+// weekLabel renders a compact week-start label for report columns, e.g. "1 Sep".
+func weekLabel(t time.Time) string {
+	return fmt.Sprintf("%d %s", t.Day(), bulanID[int(t.Month())])
+}

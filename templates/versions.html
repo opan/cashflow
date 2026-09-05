@@ -1,0 +1,46 @@
+{{define "title"}}Detail transaksi &mdash; {{.Data.Plan.Title}}{{end}}
+{{define "content"}}
+<nav class="crumb"><a href="{{.Data.BasePath}}">&larr; Kembali</a></nav>
+
+<div class="planhead">
+  <div>
+    <h1>Detail transaksi</h1>
+    <p class="muted">
+      {{if .Data.Entry.IsIncome}}Pemasukan{{else}}Pengeluaran{{end}} &middot;
+      <strong>{{rupiah .Data.Entry.Amount}}</strong>
+      <span class="small">(jumlah terkunci)</span>
+    </p>
+  </div>
+  {{if .Data.Owner}}<a class="btn primary" href="{{.Data.BasePath}}/entry/{{.Data.Entry.ID}}/edit">Ubah</a>{{end}}
+</div>
+
+<section class="card">
+  <div class="cardhead">
+    <h3>Versi</h3>
+    <span class="muted small">Terbaru di atas &middot; jumlah tidak pernah berubah</span>
+  </div>
+  <ol class="versions">
+    <li class="version current">
+      <div class="vhead"><span class="badge owner">Versi terbaru</span></div>
+      <dl>
+        {{if .Data.Entry.IsIncome}}<dt>Pembayar</dt><dd>{{.Data.Entry.Party}}</dd>
+        {{else}}<dt>Penerima</dt><dd>{{if .Data.Entry.Party}}{{.Data.Entry.Party}}{{else}}&mdash;{{end}}</dd>{{end}}
+        <dt>Keterangan</dt><dd>{{if .Data.Entry.Description}}{{.Data.Entry.Description}}{{else}}&mdash;{{end}}</dd>
+        <dt>Tanggal</dt><dd>{{tgl .Data.Entry.OccurredAt}}</dd>
+      </dl>
+    </li>
+    {{range .Data.Revisions}}
+    <li class="version">
+      <div class="vhead muted small">Nilai sebelumnya &middot; diubah {{tgl .RevisedAt}}</div>
+      <dl>
+        {{if $.Data.Entry.IsIncome}}<dt>Pembayar</dt><dd>{{.Party}}</dd>
+        {{else}}<dt>Penerima</dt><dd>{{if .Party}}{{.Party}}{{else}}&mdash;{{end}}</dd>{{end}}
+        <dt>Keterangan</dt><dd>{{if .Description}}{{.Description}}{{else}}&mdash;{{end}}</dd>
+        <dt>Tanggal</dt><dd>{{tgl .OccurredAt}}</dd>
+      </dl>
+    </li>
+    {{end}}
+  </ol>
+  {{if not .Data.Revisions}}<p class="muted small">Catatan ini belum pernah diubah.</p>{{end}}
+</section>
+{{end}}

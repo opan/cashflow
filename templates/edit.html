@@ -1,0 +1,40 @@
+{{define "title"}}Ubah transaksi &mdash; {{.Data.Plan.Title}}{{end}}
+{{define "content"}}
+<nav class="crumb"><a href="/kelola/{{.Data.Plan.Slug}}/entry/{{.Data.Entry.ID}}">&larr; Detail transaksi</a></nav>
+
+<div class="planhead">
+  <h1>Ubah transaksi</h1>
+  <span class="badge owner">Mode Pemilik</span>
+</div>
+
+{{if .Data.Err}}<div class="alert error">{{.Data.Err}}</div>{{end}}
+
+<section class="card">
+  <p class="muted small">Jumlah dan jenis <strong>terkunci</strong>. Setiap perubahan disimpan sebagai versi baru dan tetap terlihat oleh semua orang di riwayat.</p>
+  <div class="lockrow">
+    <div><span class="lbl">Jenis</span><strong>{{if .Data.Entry.IsIncome}}Pemasukan{{else}}Pengeluaran{{end}}</strong></div>
+    <div><span class="lbl">Jumlah</span><strong>{{rupiah .Data.Entry.Amount}}</strong></div>
+  </div>
+  <form method="post" action="/kelola/{{.Data.Plan.Slug}}/entry/{{.Data.Entry.ID}}/edit" class="stack">
+    {{if .Data.Entry.IsIncome}}
+    <label>Pembayar
+      <input type="text" name="party" value="{{.Data.Entry.Party}}" required maxlength="200">
+    </label>
+    <label>Catatan <span class="muted">(opsional)</span>
+      <input type="text" name="description" value="{{.Data.Entry.Description}}" maxlength="1000">
+    </label>
+    {{else}}
+    <label>Keterangan
+      <input type="text" name="description" value="{{.Data.Entry.Description}}" required maxlength="1000">
+    </label>
+    <label>Penerima <span class="muted">(opsional)</span>
+      <input type="text" name="party" value="{{.Data.Entry.Party}}" maxlength="200">
+    </label>
+    {{end}}
+    <label>Tanggal
+      <input type="date" name="date" value="{{iso .Data.Entry.OccurredAt}}">
+    </label>
+    <button class="btn primary" type="submit">Simpan perubahan</button>
+  </form>
+</section>
+{{end}}

@@ -43,15 +43,59 @@ CREATE INDEX IF NOT EXISTS entries_plan_idx
 ALTER TABLE entries ADD COLUMN IF NOT EXISTS attachment_url  text NOT NULL DEFAULT '';
 ALTER TABLE entries ADD COLUMN IF NOT EXISTS attachment_name text NOT NULL DEFAULT '';
 
--- Truthfulness guarantee: entries are append-only. Block UPDATE/DELETE at the
--- database level so the ledger is immutable even outside the application.
+-- Version history: each edit snapshots the entry's PREVIOUS party/description/
+-- occurred_at here (append-only). The live values stay on entries.
+CREATE TABLE IF NOT EXISTS entry_revisions (
+    id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    entry_id    uuid        NOT NULL REFERENCES entries(id),
+    party       text        NOT NULL DEFAULT '',
+    description text        NOT NULL DEFAULT '',
+    occurred_at date        NOT NULL,
+    revised_at  timestamptz NOT NULL DEFAULT now()  -- when this value was superseded
+);
+CREATE INDEX IF NOT EXISTS entry_revisions_entry_idx ON entry_revisions (entry_id, revised_at);
+
+-- Shared "block all modification" guard (used to keep the revision log immutable).
 CREATE OR REPLACE FUNCTION entries_no_modify() RETURNS trigger AS $$
 BEGIN
-    RAISE EXCEPTION 'entries are append-only: they cannot be modified or deleted';
+    RAISE EXCEPTION 'append-only: rows cannot be modified or deleted';
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS entry_revisions_immutable ON entry_revisions;
+CREATE TRIGGER entry_revisions_immutable
+    BEFORE UPDATE OR DELETE ON entry_revisions
+    FOR EACH ROW EXECUTE FUNCTION entries_no_modify();
+
+-- Truthfulness guarantee: entries can never be deleted, and amount/type/
+-- attachment/created_at are immutable. Only party/description/occurred_at may be
+-- updated, and each such update snapshots the previous values into
+-- entry_revisions so the full history is preserved and visible.
+CREATE OR REPLACE FUNCTION entries_guard() RETURNS trigger AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'entries are append-only: they cannot be deleted';
+    END IF;
+    IF NEW.amount IS DISTINCT FROM OLD.amount
+       OR NEW.type IS DISTINCT FROM OLD.type
+       OR NEW.cashplan_id IS DISTINCT FROM OLD.cashplan_id
+       OR NEW.created_at IS DISTINCT FROM OLD.created_at
+       OR NEW.attachment_url IS DISTINCT FROM OLD.attachment_url
+       OR NEW.attachment_name IS DISTINCT FROM OLD.attachment_name THEN
+        RAISE EXCEPTION 'only party, description, and occurred_at may be edited';
+    END IF;
+    IF NEW.party IS DISTINCT FROM OLD.party
+       OR NEW.description IS DISTINCT FROM OLD.description
+       OR NEW.occurred_at IS DISTINCT FROM OLD.occurred_at THEN
+        INSERT INTO entry_revisions (entry_id, party, description, occurred_at)
+        VALUES (OLD.id, OLD.party, OLD.description, OLD.occurred_at);
+    END IF;
+    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS entries_immutable ON entries;
-CREATE TRIGGER entries_immutable
+DROP TRIGGER IF EXISTS entries_guard ON entries;
+CREATE TRIGGER entries_guard
     BEFORE UPDATE OR DELETE ON entries
-    FOR EACH ROW EXECUTE FUNCTION entries_no_modify();
+    FOR EACH ROW EXECUTE FUNCTION entries_guard();

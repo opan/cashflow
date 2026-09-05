@@ -91,20 +91,20 @@ go run .
 > Peningkatan berikutnya bisa berupa: opsi cashplan privat, rate-limiting login,
 > dan token CSRF eksplisit (saat ini mengandalkan SameSite=Lax).
 
-## Jaminan append-only (truthfulness)
+## Jaminan integritas (truthfulness)
 
-Kejujuran data ("cannot be modified by user") ditegakkan di **dua lapis**:
+Kejujuran data ditegakkan di level **database** oleh trigger `entries_guard`:
 
-1. **Aplikasi** tidak menyediakan endpoint apa pun untuk mengubah/menghapus entri.
-2. **Database** memiliki trigger yang menolak `UPDATE`/`DELETE` pada tabel `entries`:
+1. Entri **tidak bisa dihapus**, dan **jumlah (amount) serta jenis** (pemasukan/
+   pengeluaran) **tidak bisa diubah** — terkunci agar angka tidak bisa dimanipulasi.
+2. Hanya **pembayar/penerima, keterangan, dan tanggal** yang dapat diperbaiki. Setiap
+   perubahan menyimpan nilai lama ke tabel append-only `entry_revisions`, sehingga
+   **riwayat versi tetap utuh dan terlihat semua orang** (label "telah diperbarui" +
+   timeline versi pada tiap catatan).
+3. `entry_revisions` sendiri append-only (tidak bisa di-`UPDATE`/`DELETE`).
 
-   ```sql
-   CREATE TRIGGER entries_immutable
-     BEFORE UPDATE OR DELETE ON entries
-     FOR EACH ROW EXECUTE FUNCTION entries_no_modify();
-   ```
-
-   Sehingga entri tidak bisa diubah bahkan dari luar aplikasi (mis. via `psql`).
+Semua aturan ini berlaku bahkan dari luar aplikasi (mis. via `psql`) — mencoba
+mengubah amount/type atau menghapus entri akan ditolak database.
 
 ## Struktur berkas
 
@@ -129,7 +129,9 @@ users(id, username, password_hash, created_at)
 sessions(id, user_id, created_at, expires_at)
 cashplans(id, owner_id, slug, title, description, created_at)
 entries(id, cashplan_id, type['income'|'expense'], party, description,
-        amount /* whole rupiah */, occurred_at, created_at)
+        amount /* whole rupiah, immutable */, occurred_at, created_at,
+        attachment_url, attachment_name)
+entry_revisions(id, entry_id, party, description, occurred_at, revised_at)
 ```
 
 `party` = pembayar (income) / penerima (expense). `description` = catatan (income)

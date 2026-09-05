@@ -55,7 +55,7 @@
 <section class="card">
   <div class="cardhead">
     <h3>Riwayat</h3>
-    <span class="muted small">Append-only &middot; tidak dapat diubah atau dihapus</span>
+    <span class="muted small">Append-only &middot; jumlah terkunci; perubahan lain tersimpan sebagai versi</span>
   </div>
 
   <form class="searchrow" method="get" action="{{.BasePath}}">
@@ -89,6 +89,8 @@
               <strong>{{.Description}}</strong>{{if .Party}} <span class="muted">&rarr; {{.Party}}</span>{{end}}
             {{end}}
             {{if .HasAttachment}} <a class="attach" href="{{.AttachmentURL}}" target="_blank" rel="noopener noreferrer" title="{{.AttachmentName}}">&#128206; bukti</a>{{end}}
+            {{if .Edited}} <a class="edited" href="{{$.BasePath}}/entry/{{.ID}}">(telah diperbarui)</a>{{end}}
+            {{if $.Owner}} <a class="rowedit" href="{{$.BasePath}}/entry/{{.ID}}/edit">Ubah</a>{{end}}
           </td>
           <td class="num {{.Type}}">{{if .IsIncome}}+{{else}}&minus;{{end}}{{rupiah .Amount}}</td>
         </tr>
@@ -114,4 +116,30 @@
     {{end}}
   {{end}}
 </section>
+{{end}}
+
+{{define "matrix"}}
+{{if .HasData}}
+<div class="tablewrap">
+  <table class="datatable matrix">
+    <thead>
+      <tr><th>Nama</th>{{range .Cols}}<th class="num">{{.}}</th>{{end}}<th class="num">Total</th></tr>
+    </thead>
+    <tbody>
+      {{range .Rows}}
+      <tr>
+        <td class="nowrap"><strong>{{.Party}}</strong></td>
+        {{range .Cells}}<td class="num">{{if gt . 0}}{{rupiah .}}{{else}}&mdash;{{end}}</td>{{end}}
+        <td class="num"><strong>{{rupiah .Total}}</strong></td>
+      </tr>
+      {{end}}
+    </tbody>
+    <tfoot>
+      <tr><td>Total</td>{{range .ColTotals}}<td class="num">{{rupiah .}}</td>{{end}}<td class="num"><strong>{{rupiah $.Grand}}</strong></td></tr>
+    </tfoot>
+  </table>
+</div>
+{{else}}
+<p class="muted empty">Tidak ada data pada rentang ini.</p>
+{{end}}
 {{end}}
