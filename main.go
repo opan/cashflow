@@ -89,11 +89,12 @@ func main() {
 	mux.HandleFunc("GET /p/{slug}/laporan", app.handleViewReport)
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(staticFS)))
 
-	go pruneSessions(pool) // periodically delete expired sessions
+	go pruneSessions(pool)                       // periodically delete expired sessions
+	go serveMetrics(env("METRICS_PORT", "9090")) // Prometheus /metrics on a separate port
 
 	srv := &http.Server{
 		Addr:              ":" + port,
-		Handler:           logRequests(securityHeaders(app.withUser(mux))),
+		Handler:           logRequests(securityHeaders(app.withUser(metricsMiddleware(mux)))),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       60 * time.Second,  // generous: allows a slow ~5 MB receipt upload
 		WriteTimeout:      120 * time.Second, // generous: allows the Nextcloud round-trip
