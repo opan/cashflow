@@ -1,0 +1,117 @@
+{{define "summary"}}
+<section class="summary">
+  <div class="stat income">
+    <span class="lbl">Total pemasukan</span>
+    <span class="val">{{rupiah .TotalIncome}}</span>
+  </div>
+  <div class="stat expense">
+    <span class="lbl">Total pengeluaran</span>
+    <span class="val">{{rupiah .TotalExpense}}</span>
+  </div>
+  <div class="stat balance {{if lt .Balance 0}}neg{{end}}">
+    <span class="lbl">Saldo</span>
+    <span class="val">{{rupiah .Balance}}</span>
+  </div>
+  <div class="stat">
+    <span class="lbl">Jumlah pembayar</span>
+    <span class="val">{{.PayerCount}}</span>
+  </div>
+  <div class="stat">
+    <span class="lbl">Jumlah transaksi</span>
+    <span class="val">{{.EntryCount}}</span>
+  </div>
+</section>
+{{end}}
+
+{{define "payers"}}
+{{if .}}
+<section class="card">
+  <div class="cardhead">
+    <h3>Rincian per pembayar</h3>
+    <span class="muted small">Hanya pemasukan</span>
+  </div>
+  <div class="tablewrap">
+    <table class="datatable">
+      <thead>
+        <tr><th>Pembayar</th><th class="num">Total</th><th class="num">Setoran</th><th>Terakhir</th></tr>
+      </thead>
+      <tbody>
+        {{range .}}
+        <tr>
+          <td><strong>{{.Party}}</strong></td>
+          <td class="num income">{{rupiah .Total}}</td>
+          <td class="num">{{.Count}}&times;</td>
+          <td class="nowrap">{{tgl .Last}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</section>
+{{end}}
+{{end}}
+
+{{define "history"}}
+<section class="card">
+  <div class="cardhead">
+    <h3>Riwayat</h3>
+    <span class="muted small">Append-only &middot; tidak dapat diubah atau dihapus</span>
+  </div>
+
+  <form class="searchrow" method="get" action="{{.BasePath}}">
+    <input type="search" name="q" value="{{.Query}}" placeholder="Cari pembayar atau keterangan&hellip;" aria-label="Cari riwayat">
+    <button class="btn" type="submit">Cari</button>
+    {{if .Query}}<a class="btn ghost" href="{{.BasePath}}">Reset</a>{{end}}
+  </form>
+
+  {{if .Entries}}
+  <div class="tablewrap">
+    <table class="datatable history">
+      <thead>
+        <tr>
+          <th>Tanggal</th>
+          <th>Jenis</th>
+          <th>Keterangan</th>
+          <th class="num">Jumlah</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Entries}}
+        <tr class="row {{.Type}}">
+          <td class="nowrap">{{tgl .OccurredAt}}</td>
+          <td>
+            {{if .IsIncome}}<span class="pill in">Masuk</span>{{else}}<span class="pill out">Keluar</span>{{end}}
+          </td>
+          <td>
+            {{if .IsIncome}}
+              <strong>{{.Party}}</strong>{{if .Description}} <span class="muted">&mdash; {{.Description}}</span>{{end}}
+            {{else}}
+              <strong>{{.Description}}</strong>{{if .Party}} <span class="muted">&rarr; {{.Party}}</span>{{end}}
+            {{end}}
+            {{if .HasAttachment}} <a class="attach" href="{{.AttachmentURL}}" target="_blank" rel="noopener noreferrer" title="{{.AttachmentName}}">&#128206; bukti</a>{{end}}
+          </td>
+          <td class="num {{.Type}}">{{if .IsIncome}}+{{else}}&minus;{{end}}{{rupiah .Amount}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pager">
+    <span class="muted small">
+      {{if .Query}}{{.Total}} hasil untuk &ldquo;{{.Query}}&rdquo; &middot; {{end}}Halaman {{.Page}} dari {{.TotalPages}}
+    </span>
+    <span class="pager-btns">
+      {{if .PrevURL}}<a class="btn small" href="{{.PrevURL}}">&larr; Sebelumnya</a>{{else}}<span class="btn small disabled">&larr; Sebelumnya</span>{{end}}
+      {{if .NextURL}}<a class="btn small" href="{{.NextURL}}">Berikutnya &rarr;</a>{{else}}<span class="btn small disabled">Berikutnya &rarr;</span>{{end}}
+    </span>
+  </div>
+  {{else}}
+    {{if .Query}}
+      <p class="muted empty">Tidak ada hasil untuk &ldquo;{{.Query}}&rdquo;. <a href="{{.BasePath}}">Tampilkan semua</a>.</p>
+    {{else}}
+      <p class="muted empty">Belum ada catatan. Transaksi yang tersimpan akan muncul di sini.</p>
+    {{end}}
+  {{end}}
+</section>
+{{end}}

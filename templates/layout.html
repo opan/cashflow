@@ -1,0 +1,31 @@
+{{define "layout"}}<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{block "title" .}}Cashflow{{end}}</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap bar">
+      <a class="brand" href="/">💰 Cashflow</a>
+      <nav class="nav">
+        {{if .Username}}
+          <span class="who" title="{{.Username}}">{{.Username}}</span>
+          <form method="post" action="/logout" class="inline"><button class="linkbtn" type="submit">Keluar</button></form>
+        {{else}}
+          <a href="/login">Masuk</a>
+          <a href="/register" class="btn primary small">Daftar</a>
+        {{end}}
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+    {{block "content" .}}{{end}}
+  </main>
+  <footer class="foot"><div class="wrap">Cashflow &middot; catat, bagikan, transparan.</div></footer>
+  <script src="/static/app.js"></script>
+</body>
+</html>{{end}}

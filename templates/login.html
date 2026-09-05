@@ -1,0 +1,17 @@
+{{define "title"}}Masuk &mdash; Cashflow{{end}}
+{{define "content"}}
+<section class="card authcard">
+  <h1>Masuk</h1>
+  {{if .Data.Err}}<div class="alert error">{{.Data.Err}}</div>{{end}}
+  <form method="post" action="/login" class="stack">
+    <label>Nama pengguna
+      <input type="text" name="username" value="{{.Data.Username}}" placeholder="cth: budi_kas" required autofocus autocapitalize="none" spellcheck="false">
+    </label>
+    <label>Kata sandi
+      <input type="password" name="password" required>
+    </label>
+    <button type="submit" class="btn primary">Masuk</button>
+  </form>
+  <p class="muted small">Belum punya akun? <a href="/register">Daftar di sini</a>.</p>
+</section>
+{{end}}

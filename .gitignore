@@ -1,0 +1,5 @@
+/cashflow
+/tmp
+*.env
+.env
+.DS_Store

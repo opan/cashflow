@@ -1,0 +1,18 @@
+{{define "title"}}{{.Data.Plan.Title}}{{end}}
+{{define "content"}}
+<div class="planhead">
+  <div>
+    <h1>{{.Data.Plan.Title}}</h1>
+    {{if .Data.Plan.Description}}<p class="muted">{{.Data.Plan.Description}}</p>{{end}}
+  </div>
+  <span class="badge view">Mode Lihat</span>
+</div>
+
+<div class="actions"><a class="btn" href="/p/{{.Data.Plan.Slug}}/laporan">&#128196; Lihat Laporan</a></div>
+
+<p class="muted">Anda melihat cashplan ini dalam mode baca-saja. Riwayat bersifat append-only, jadi data yang Anda lihat sama untuk semua orang.</p>
+
+{{template "summary" .Data.Summary}}
+{{template "payers" .Data.Payers}}
+{{template "history" .Data.History}}
+{{end}}

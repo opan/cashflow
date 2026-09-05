@@ -1,0 +1,63 @@
+{{define "title"}}{{.Data.Plan.Title}} &mdash; Kelola{{end}}
+{{define "content"}}
+<nav class="crumb"><a href="/">&larr; Dasbor</a></nav>
+
+<div class="planhead">
+  <div>
+    <h1>{{.Data.Plan.Title}}</h1>
+    {{if .Data.Plan.Description}}<p class="muted">{{.Data.Plan.Description}}</p>{{end}}
+  </div>
+  <span class="badge owner">Mode Pemilik</span>
+</div>
+
+<div class="actions"><a class="btn" href="/kelola/{{.Data.Plan.Slug}}/laporan">&#128196; Lihat Laporan</a></div>
+
+{{if .Data.Err}}<div class="alert error">{{.Data.Err}}</div>{{end}}
+
+<section class="card share">
+  <div class="cardhead"><h3>Bagikan cashplan ini</h3></div>
+  <p class="muted">Siapa pun yang memiliki tautan ini bisa <strong>melihat</strong> riwayat, tetapi tidak bisa mengubahnya.</p>
+  <div class="copyrow">
+    <input type="text" readonly value="{{.Data.ShareURL}}" id="shareUrl">
+    <button class="btn" type="button" data-copy="#shareUrl">Salin</button>
+  </div>
+</section>
+
+{{template "summary" .Data.Summary}}
+
+<section class="card">
+  <div class="cardhead"><h3>Tambah transaksi</h3></div>
+  <form method="post" action="/kelola/{{.Data.Plan.Slug}}/entry" class="stack" id="entryForm" enctype="multipart/form-data">
+    <label>Jenis
+      <select name="type" id="typeSel">
+        <option value="income">Pemasukan (uang masuk)</option>
+        <option value="expense">Pengeluaran (uang keluar)</option>
+      </select>
+    </label>
+    <label>
+      <span class="lbltext" data-income="Pembayar" data-expense="Penerima (opsional)">Pembayar</span>
+      <input type="text" name="party" id="partyInput" placeholder="cth: Budi" maxlength="200" required>
+    </label>
+    <label>Jumlah (Rp)
+      <input type="text" name="amount" class="amount-input" inputmode="numeric" autocomplete="off" placeholder="cth: 50.000" required>
+    </label>
+    <label>Tanggal
+      <input type="date" name="date" value="{{.Data.Today}}">
+    </label>
+    <label>
+      <span class="lbltext" data-income="Catatan (opsional)" data-expense="Keterangan">Catatan (opsional)</span>
+      <input type="text" name="description" id="descInput" placeholder="cth: iuran September" maxlength="1000">
+    </label>
+    {{if .Data.Uploads}}
+    <label>Bukti transaksi <span class="muted">(opsional &mdash; gambar atau PDF, maks 2 MB)</span>
+      <input type="file" name="receipt" accept="image/*,application/pdf,.heic">
+    </label>
+    {{end}}
+    <button class="btn income" type="submit" id="entrySubmit">Simpan transaksi</button>
+  </form>
+</section>
+
+{{template "payers" .Data.Payers}}
+
+{{template "history" .Data.History}}
+{{end}}

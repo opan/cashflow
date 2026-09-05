@@ -1,0 +1,46 @@
+{{define "title"}}Dasbor &mdash; Cashflow{{end}}
+{{define "content"}}
+<div class="planhead">
+  <h1>Cashplan Anda</h1>
+</div>
+
+<section class="card formcard">
+  <div class="cardhead"><h3>Buat cashplan baru</h3></div>
+  {{if .Data.Err}}<div class="alert error">{{.Data.Err}}</div>{{end}}
+  <form method="post" action="/cashplans" class="stack">
+    <label>Nama cashplan
+      <input type="text" name="title" id="planTitle" value="{{.Data.FTitle}}" placeholder="cth: Uang kas sekolah anak" required maxlength="200">
+    </label>
+    <label>Tautan unik (slug)
+      <div class="slugrow">
+        <span class="slugpre">{{.Data.BaseURL}}/p/</span>
+        <input type="text" name="slug" id="planSlug" value="{{.Data.FSlug}}" placeholder="uang-kas-kelas-3a" maxlength="40" spellcheck="false" autocapitalize="none">
+      </div>
+      <small class="muted">Huruf kecil, angka, dan tanda hubung. Bersifat unik &mdash; siapa cepat dia dapat.</small>
+    </label>
+    <label>Deskripsi <span class="muted">(opsional)</span>
+      <textarea name="description" rows="2" placeholder="cth: Iuran bulanan kelas 3A" maxlength="1000">{{.Data.FDesc}}</textarea>
+    </label>
+    <button type="submit" class="btn primary">Buat cashplan &rarr;</button>
+  </form>
+</section>
+
+{{if .Data.Plans}}
+<div class="planlist">
+  {{range .Data.Plans}}
+  <a class="card plancard" href="/kelola/{{.Plan.Slug}}">
+    <div class="plancard-head">
+      <h3>{{.Plan.Title}}</h3>
+      <span class="saldo {{if lt .Summary.Balance 0}}neg{{end}}">{{rupiah .Summary.Balance}}</span>
+    </div>
+    <div class="plancard-meta muted small">
+      <span>/p/{{.Plan.Slug}}</span>
+      <span>&middot; {{.Summary.EntryCount}} transaksi &middot; {{.Summary.PayerCount}} pembayar</span>
+    </div>
+  </a>
+  {{end}}
+</div>
+{{else}}
+<p class="muted empty">Belum ada cashplan. Buat yang pertama di atas.</p>
+{{end}}
+{{end}}

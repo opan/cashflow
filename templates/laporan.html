@@ -1,0 +1,85 @@
+{{define "title"}}Laporan &mdash; {{.Data.Plan.Title}}{{end}}
+{{define "content"}}
+<div class="reportbar no-print">
+  <a href="{{if .Data.Public}}/p/{{.Data.Plan.Slug}}{{else}}/kelola/{{.Data.Plan.Slug}}{{end}}">&larr; Kembali</a>
+  <button class="btn primary" type="button" data-print>&#128424; Cetak / Simpan PDF</button>
+</div>
+
+<article class="laporan">
+  <header class="lap-head">
+    <div class="lap-kicker">Laporan Keuangan</div>
+    <h1>{{.Data.Plan.Title}}</h1>
+    {{if .Data.Plan.Description}}<p class="lap-sub">{{.Data.Plan.Description}}</p>{{end}}
+    <div class="lap-period">Periode: {{.Data.Period}}</div>
+  </header>
+
+  <section class="lap-sec">
+    <h2><span class="lap-no">1</span> Pemasukan</h2>
+    <div class="lap-total income">
+      <span>Total Pemasukan</span>
+      <strong>{{rupiah .Data.Summary.TotalIncome}}</strong>
+    </div>
+    <p class="muted small">Dari {{.Data.Summary.PayerCount}} pembayar.</p>
+    {{if .Data.Payers}}
+    <div class="tablewrap">
+      <table class="datatable">
+        <thead><tr><th>Pembayar</th><th class="num">Total</th><th class="num">Setoran</th></tr></thead>
+        <tbody>
+          {{range .Data.Payers}}
+          <tr><td>{{.Party}}</td><td class="num income">{{rupiah .Total}}</td><td class="num">{{.Count}}&times;</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{end}}
+  </section>
+
+  <section class="lap-sec">
+    <h2><span class="lap-no">2</span> Pengeluaran</h2>
+    {{if .Data.Expenses}}
+    <div class="tablewrap">
+      <table class="datatable">
+        <thead>
+          <tr><th class="nowrap">No</th><th>Keterangan</th><th class="nowrap">Tanggal</th><th class="num">Nominal</th></tr>
+        </thead>
+        <tbody>
+          {{range $i, $e := .Data.Expenses}}
+          <tr>
+            <td class="nowrap">{{add1 $i}}</td>
+            <td><strong>{{$e.Description}}</strong>{{if $e.Party}} <span class="muted">&rarr; {{$e.Party}}</span>{{end}}</td>
+            <td class="nowrap">{{tgl $e.OccurredAt}}</td>
+            <td class="num expense">{{rupiah $e.Amount}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+        <tfoot>
+          <tr><td colspan="3" class="num">Total Pengeluaran</td><td class="num expense">{{rupiah .Data.Summary.TotalExpense}}</td></tr>
+        </tfoot>
+      </table>
+    </div>
+    {{else}}<p class="muted">Belum ada pengeluaran.</p>{{end}}
+  </section>
+
+  <section class="lap-sec">
+    <h2><span class="lap-no">3</span> Rekapitulasi</h2>
+    <table class="lap-recap">
+      <tr><td>Total Pemasukan</td><td class="num income">{{rupiah .Data.Summary.TotalIncome}}</td></tr>
+      <tr><td>Total Pengeluaran</td><td class="num expense">{{rupiah .Data.Summary.TotalExpense}}</td></tr>
+      <tr class="saldo">
+        <td>Saldo Akhir{{if lt .Data.Summary.Balance 0}} <span class="kurang">(Kurang)</span>{{end}}</td>
+        <td class="num {{if lt .Data.Summary.Balance 0}}expense{{else}}income{{end}}">{{rupiah .Data.Summary.Balance}}</td>
+      </tr>
+    </table>
+  </section>
+
+  <section class="lap-sec">
+    <h2><span class="lap-no">4</span> Keterangan</h2>
+    <div class="lap-note">{{.Data.Keterangan}}</div>
+  </section>
+
+  <footer class="lap-foot">
+    <p>Dibuat dengan Cashflow &middot; {{tgl .Data.Generated}}</p>
+    <p class="muted small">Terima kasih atas kebersamaan dan tanggung jawabnya.</p>
+  </footer>
+</article>
+{{end}}
