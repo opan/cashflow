@@ -152,6 +152,12 @@ func (s *Store) CountCashplans(ctx context.Context) (int64, error) {
 	return n, err
 }
 
+func (s *Store) CountEntries(ctx context.Context) (int64, error) {
+	var n int64
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM entries`).Scan(&n)
+	return n, err
+}
+
 func (s *Store) UserBySession(ctx context.Context, token string) (*User, error) {
 	u := &User{}
 	err := s.pool.QueryRow(ctx,

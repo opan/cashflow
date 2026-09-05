@@ -339,6 +339,7 @@ func (a *App) handleRegister(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	recordUserCreated(r.Context())
 	if err := a.startSession(w, r, u.ID); err != nil {
 		log.Printf("start session: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -548,6 +549,7 @@ func (a *App) handleAddEntry(w http.ResponseWriter, r *http.Request) {
 		a.renderManage(w, r, plan, "Gagal menyimpan transaksi.")
 		return
 	}
+	recordEntryCreated(r.Context(), typ)
 	http.Redirect(w, r, "/kelola/"+plan.Slug, http.StatusSeeOther)
 }
 

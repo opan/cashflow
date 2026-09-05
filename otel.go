@@ -9,6 +9,7 @@ import (
 
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -19,8 +20,10 @@ import (
 // OTel HTTP-server instruments (semantic-convention names). Nil until initOTel
 // succeeds, so the middleware is a no-op when telemetry is disabled.
 var (
-	reqDuration metric.Float64Histogram
-	activeReqs  metric.Int64UpDownCounter
+	reqDuration    metric.Float64Histogram
+	activeReqs     metric.Int64UpDownCounter
+	entriesCreated metric.Int64Counter
+	usersCreated   metric.Int64Counter
 )
 
 // initOTel wires up OTLP metric export (push) to the collector. Endpoint,
@@ -68,6 +71,20 @@ func initOTel(ctx context.Context) (shutdown func(context.Context) error, enable
 	if err != nil {
 		log.Printf("otel counter: %v", err)
 	}
+	entriesCreated, err = meter.Int64Counter(
+		"cashflow.entries.created",
+		metric.WithDescription("Entries created (income/expense records)."),
+	)
+	if err != nil {
+		log.Printf("otel entries counter: %v", err)
+	}
+	usersCreated, err = meter.Int64Counter(
+		"cashflow.users.created",
+		metric.WithDescription("User registrations."),
+	)
+	if err != nil {
+		log.Printf("otel users counter: %v", err)
+	}
 
 	// Go runtime metrics (memory, goroutines, GC).
 	if err := runtime.Start(runtime.WithMinimumReadMemStatsInterval(time.Second)); err != nil {
@@ -105,9 +122,28 @@ func otelMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// registerBusinessMetrics adds gauges for total users and cashplans, sampled
-// from the DB on each metric collection. Safe to call when OTel is disabled
-// (the global meter is then a no-op and the callbacks never run).
+// recordEntryCreated increments the entry-creation counter, tagged by type
+// ("income"/"expense"). Rate this metric to spot bursts/flooding. No-op when
+// telemetry is disabled.
+func recordEntryCreated(ctx context.Context, typ string) {
+	if entriesCreated == nil {
+		return
+	}
+	entriesCreated.Add(ctx, 1, metric.WithAttributes(attribute.String("type", typ)))
+}
+
+// recordUserCreated increments the registration counter (use increase()[7d] for
+// new users this week). No-op when telemetry is disabled.
+func recordUserCreated(ctx context.Context) {
+	if usersCreated == nil {
+		return
+	}
+	usersCreated.Add(ctx, 1)
+}
+
+// registerBusinessMetrics adds gauges for total users, cashplans and entries,
+// sampled from the DB on each metric collection. Safe to call when OTel is
+// disabled (the global meter is then a no-op and the callbacks never run).
 func registerBusinessMetrics(store *Store) {
 	meter := otel.Meter("cashflow")
 	if _, err := meter.Int64ObservableGauge("cashflow.users",
@@ -135,5 +171,18 @@ func registerBusinessMetrics(store *Store) {
 		}),
 	); err != nil {
 		log.Printf("otel cashplans gauge: %v", err)
+	}
+	if _, err := meter.Int64ObservableGauge("cashflow.entries",
+		metric.WithDescription("Total entries recorded."),
+		metric.WithInt64Callback(func(ctx context.Context, o metric.Int64Observer) error {
+			n, err := store.CountEntries(ctx)
+			if err != nil {
+				return err
+			}
+			o.Observe(n)
+			return nil
+		}),
+	); err != nil {
+		log.Printf("otel entries gauge: %v", err)
 	}
 }
