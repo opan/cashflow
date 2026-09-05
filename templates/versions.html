@@ -21,7 +21,10 @@
   </div>
   <ol class="versions">
     <li class="version current">
-      <div class="vhead"><span class="badge owner">Versi terbaru</span></div>
+      <div class="vhead">
+        <span class="badge owner">Versi terbaru</span>
+        {{if .Data.HasEdits}}<span class="muted small">diperbarui {{waktu .Data.LastEditedAt}}{{if .Data.LastEditedBy}} oleh <strong>{{.Data.LastEditedBy}}</strong>{{end}}</span>{{end}}
+      </div>
       <dl>
         {{if .Data.Entry.IsIncome}}<dt>Pembayar</dt><dd>{{.Data.Entry.Party}}</dd>
         {{else}}<dt>Penerima</dt><dd>{{if .Data.Entry.Party}}{{.Data.Entry.Party}}{{else}}&mdash;{{end}}</dd>{{end}}
@@ -31,7 +34,7 @@
     </li>
     {{range .Data.Revisions}}
     <li class="version">
-      <div class="vhead muted small">Nilai sebelumnya &middot; diubah {{tgl .RevisedAt}}</div>
+      <div class="vhead muted small">Nilai sebelumnya &middot; diubah {{waktu .RevisedAt}}{{if .EditedBy}} oleh <strong>{{.EditedBy}}</strong>{{end}}</div>
       <dl>
         {{if $.Data.Entry.IsIncome}}<dt>Pembayar</dt><dd>{{.Party}}</dd>
         {{else}}<dt>Penerima</dt><dd>{{if .Party}}{{.Party}}{{else}}&mdash;{{end}}</dd>{{end}}

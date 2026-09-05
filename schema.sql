@@ -51,9 +51,11 @@ CREATE TABLE IF NOT EXISTS entry_revisions (
     party       text        NOT NULL DEFAULT '',
     description text        NOT NULL DEFAULT '',
     occurred_at date        NOT NULL,
-    revised_at  timestamptz NOT NULL DEFAULT now()  -- when this value was superseded
+    edited_by   text        NOT NULL DEFAULT '',   -- username who made the superseding edit
+    revised_at  timestamptz NOT NULL DEFAULT now() -- when this value was superseded
 );
 CREATE INDEX IF NOT EXISTS entry_revisions_entry_idx ON entry_revisions (entry_id, revised_at);
+ALTER TABLE entry_revisions ADD COLUMN IF NOT EXISTS edited_by text NOT NULL DEFAULT '';
 
 -- Shared "block all modification" guard (used to keep the revision log immutable).
 CREATE OR REPLACE FUNCTION entries_no_modify() RETURNS trigger AS $$
@@ -87,8 +89,9 @@ BEGIN
     IF NEW.party IS DISTINCT FROM OLD.party
        OR NEW.description IS DISTINCT FROM OLD.description
        OR NEW.occurred_at IS DISTINCT FROM OLD.occurred_at THEN
-        INSERT INTO entry_revisions (entry_id, party, description, occurred_at)
-        VALUES (OLD.id, OLD.party, OLD.description, OLD.occurred_at);
+        INSERT INTO entry_revisions (entry_id, party, description, occurred_at, edited_by)
+        VALUES (OLD.id, OLD.party, OLD.description, OLD.occurred_at,
+                COALESCE(current_setting('cashflow.editor', true), ''));
     END IF;
     RETURN NEW;
 END;

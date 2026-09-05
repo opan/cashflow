@@ -57,6 +57,7 @@ func buildTemplates() map[string]*template.Template {
 		"tgl":    formatTanggal,
 		"add1":   func(i int) int { return i + 1 },
 		"iso":    func(t time.Time) string { return t.Format("2006-01-02") },
+		"waktu":  formatWaktu,
 	}
 	pages := map[string]*template.Template{}
 	// Each page gets its own template set (layout + partials + that page) so
@@ -693,11 +694,14 @@ type editVM struct {
 }
 
 type entryDetailVM struct {
-	Plan      *CashPlan
-	Entry     *Entry
-	Revisions []Revision
-	BasePath  string
-	Owner     bool
+	Plan         *CashPlan
+	Entry        *Entry
+	Revisions    []Revision
+	BasePath     string
+	Owner        bool
+	HasEdits     bool
+	LastEditedBy string
+	LastEditedAt time.Time
 }
 
 func (a *App) handleEditEntryForm(w http.ResponseWriter, r *http.Request) {
@@ -747,7 +751,11 @@ func (a *App) handleEditEntry(w http.ResponseWriter, r *http.Request) {
 		fail("Keterangan terlalu panjang (maksimal 1000 karakter).")
 		return
 	}
-	if _, err := a.store.EditEntry(r.Context(), entry.ID, plan.ID, party, desc, date); err != nil {
+	editor := ""
+	if u := currentUser(r); u != nil {
+		editor = u.Username
+	}
+	if _, err := a.store.EditEntry(r.Context(), entry.ID, plan.ID, party, desc, date, editor); err != nil {
 		log.Printf("edit entry: %v", err)
 		fail("Gagal menyimpan perubahan.")
 		return
@@ -782,7 +790,13 @@ func (a *App) renderEntryDetail(w http.ResponseWriter, r *http.Request, plan *Ca
 	if err != nil {
 		log.Printf("entry revisions: %v", err)
 	}
-	a.render(w, r, "versions", entryDetailVM{Plan: plan, Entry: entry, Revisions: revs, BasePath: basePath, Owner: owner})
+	vm := entryDetailVM{Plan: plan, Entry: entry, Revisions: revs, BasePath: basePath, Owner: owner}
+	if len(revs) > 0 { // the current value was set by the most recent edit
+		vm.HasEdits = true
+		vm.LastEditedBy = revs[0].EditedBy
+		vm.LastEditedAt = revs[0].RevisedAt
+	}
+	a.render(w, r, "versions", vm)
 }
 
 // --- Helpers ---

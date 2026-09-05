@@ -59,6 +59,7 @@ type Revision struct {
 	Party       string
 	Description string
 	OccurredAt  time.Time
+	EditedBy    string // username who made the edit that superseded this value
 	RevisedAt   time.Time
 }
 
@@ -408,20 +409,38 @@ func (s *Store) EntryByID(ctx context.Context, entryID string) (*Entry, error) {
 }
 
 // EditEntry updates the editable fields. The DB trigger snapshots the previous
-// values into entry_revisions and rejects any change to amount/type/attachment.
-// The cashplan_id predicate enforces ownership. Returns rows affected.
-func (s *Store) EditEntry(ctx context.Context, entryID, planID, party, desc string, occurred time.Time) (int64, error) {
-	ct, err := s.pool.Exec(ctx,
+// values into entry_revisions (tagged with the editor) and rejects any change to
+// amount/type/attachment. The cashplan_id predicate enforces ownership. The
+// editor is passed to the trigger via a transaction-local setting. Returns rows
+// affected.
+func (s *Store) EditEntry(ctx context.Context, entryID, planID, party, desc string, occurred time.Time, editor string) (int64, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(ctx)
+
+	// set_config(..., true) = SET LOCAL: visible to the trigger, scoped to this tx.
+	if _, err := tx.Exec(ctx, `SELECT set_config('cashflow.editor', $1, true)`, editor); err != nil {
+		return 0, err
+	}
+	ct, err := tx.Exec(ctx,
 		`UPDATE entries SET party = $1, description = $2, occurred_at = $3
 		 WHERE id = $4 AND cashplan_id = $5`,
 		party, desc, occurred.Format("2006-01-02"), entryID, planID)
-	return ct.RowsAffected(), err
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
+	return ct.RowsAffected(), nil
 }
 
 // EntryRevisions returns an entry's past values, newest first.
 func (s *Store) EntryRevisions(ctx context.Context, entryID string) ([]Revision, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT party, description, occurred_at, revised_at
+		`SELECT party, description, occurred_at, edited_by, revised_at
 		 FROM entry_revisions WHERE entry_id = $1
 		 ORDER BY revised_at DESC`, entryID)
 	if err != nil {
@@ -431,7 +450,7 @@ func (s *Store) EntryRevisions(ctx context.Context, entryID string) ([]Revision,
 	var out []Revision
 	for rows.Next() {
 		var r Revision
-		if err := rows.Scan(&r.Party, &r.Description, &r.OccurredAt, &r.RevisedAt); err != nil {
+		if err := rows.Scan(&r.Party, &r.Description, &r.OccurredAt, &r.EditedBy, &r.RevisedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, r)

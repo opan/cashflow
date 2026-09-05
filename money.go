@@ -80,3 +80,9 @@ func formatBulanTahun(t time.Time) string {
 func weekLabel(t time.Time) string {
 	return fmt.Sprintf("%d %s", t.Day(), bulanID[int(t.Month())])
 }
+
+// formatWaktu renders a date + time in WIB, e.g. "4 Sep 2026, 14:30".
+func formatWaktu(t time.Time) string {
+	t = t.In(jakarta)
+	return fmt.Sprintf("%d %s %d, %02d:%02d", t.Day(), bulanID[int(t.Month())], t.Year(), t.Hour(), t.Minute())
+}
