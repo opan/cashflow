@@ -74,6 +74,9 @@ func main() {
 	}
 
 	app := &App{store: &Store{pool: pool}, tmpl: buildTemplates(), nc: nc}
+	if otelOn {
+		registerBusinessMetrics(app.store)
+	}
 
 	staticFS, err := fs.Sub(staticEmbed, "static")
 	if err != nil {

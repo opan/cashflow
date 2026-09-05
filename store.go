@@ -139,6 +139,19 @@ func (s *Store) DeleteExpiredSessions(ctx context.Context) (int64, error) {
 	return ct.RowsAffected(), err
 }
 
+// CountUsers / CountCashplans back the business-metric gauges.
+func (s *Store) CountUsers(ctx context.Context) (int64, error) {
+	var n int64
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&n)
+	return n, err
+}
+
+func (s *Store) CountCashplans(ctx context.Context) (int64, error) {
+	var n int64
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM cashplans`).Scan(&n)
+	return n, err
+}
+
 func (s *Store) UserBySession(ctx context.Context, token string) (*User, error) {
 	u := &User{}
 	err := s.pool.QueryRow(ctx,

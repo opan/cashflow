@@ -104,3 +104,36 @@ func otelMiddleware(next http.Handler) http.Handler {
 		))
 	})
 }
+
+// registerBusinessMetrics adds gauges for total users and cashplans, sampled
+// from the DB on each metric collection. Safe to call when OTel is disabled
+// (the global meter is then a no-op and the callbacks never run).
+func registerBusinessMetrics(store *Store) {
+	meter := otel.Meter("cashflow")
+	if _, err := meter.Int64ObservableGauge("cashflow.users",
+		metric.WithDescription("Registered users."),
+		metric.WithInt64Callback(func(ctx context.Context, o metric.Int64Observer) error {
+			n, err := store.CountUsers(ctx)
+			if err != nil {
+				return err
+			}
+			o.Observe(n)
+			return nil
+		}),
+	); err != nil {
+		log.Printf("otel users gauge: %v", err)
+	}
+	if _, err := meter.Int64ObservableGauge("cashflow.cashplans",
+		metric.WithDescription("Cash plans created."),
+		metric.WithInt64Callback(func(ctx context.Context, o metric.Int64Observer) error {
+			n, err := store.CountCashplans(ctx)
+			if err != nil {
+				return err
+			}
+			o.Observe(n)
+			return nil
+		}),
+	); err != nil {
+		log.Printf("otel cashplans gauge: %v", err)
+	}
+}
