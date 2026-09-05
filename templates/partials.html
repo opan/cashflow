@@ -73,6 +73,7 @@
           <th>Jenis</th>
           <th>Keterangan</th>
           <th class="num">Jumlah</th>
+          <th class="num">Aksi</th>
         </tr>
       </thead>
       <tbody>
@@ -89,10 +90,13 @@
               <strong>{{.Description}}</strong>{{if .Party}} <span class="muted">&rarr; {{.Party}}</span>{{end}}
             {{end}}
             {{if .HasAttachment}} <a class="attach" href="{{.AttachmentURL}}" target="_blank" rel="noopener noreferrer" title="{{.AttachmentName}}">&#128206; bukti</a>{{end}}
-            {{if .Edited}} <a class="edited" href="{{$.BasePath}}/entry/{{.ID}}">(telah diperbarui)</a>{{end}}
-            {{if $.Owner}} <a class="rowedit" href="{{$.BasePath}}/entry/{{.ID}}/edit">Ubah</a>{{end}}
+            {{if .Edited}} <span class="editedbadge">telah diperbarui</span>{{end}}
           </td>
           <td class="num {{.Type}}">{{if .IsIncome}}+{{else}}&minus;{{end}}{{rupiah .Amount}}</td>
+          <td class="rowactions">
+            <a class="btn tiny" href="{{$.BasePath}}/entry/{{.ID}}">Detail</a>
+            {{if $.Owner}}<a class="btn tiny" href="{{$.BasePath}}/entry/{{.ID}}/edit">Ubah</a>{{end}}
+          </td>
         </tr>
         {{end}}
       </tbody>

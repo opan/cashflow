@@ -198,7 +198,7 @@ tr.row:last-child td { border-bottom: none; }
     grid-template-areas:
       "jenis  tanggal"
       "who    who"
-      "amount amount";
+      "amount actions";
     gap: 6px 10px;
     align-items: center;
     border: 1px solid var(--line);
@@ -211,6 +211,7 @@ tr.row:last-child td { border-bottom: none; }
   table.history tr.row td:nth-child(2) { grid-area: jenis; }
   table.history tr.row td:nth-child(3) { grid-area: who; }
   table.history tr.row td:nth-child(4) { grid-area: amount; text-align: left; font-size: 1.1rem; }
+  table.history tr.row td:nth-child(5) { grid-area: actions; text-align: right; }
 }
 
 /* --- Header nav (auth state) --- */
@@ -335,3 +336,9 @@ a.btn { text-decoration: none; }
 .version dd { margin: 0; }
 
 table.matrix th, table.matrix td { white-space: nowrap; }
+
+/* History row actions (dedicated buttons) + edited badge */
+.btn.tiny { padding: 4px 10px; font-size: .78rem; line-height: 1.2; }
+.rowactions { white-space: nowrap; text-align: right; }
+.rowactions .btn + .btn { margin-left: 6px; }
+.editedbadge { display: inline-block; margin-left: 4px; font-size: .7rem; font-weight: 700; color: #92400e; background: #fef3c7; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
