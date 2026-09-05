@@ -1,0 +1,10 @@
+# Keep secrets, local junk, and non-build files out of the build context/image.
+.git
+.github
+.env
+*.env
+!.env.example
+/cashflow
+docker-compose.yml
+NOTES.md
+README.md
