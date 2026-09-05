@@ -9,7 +9,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	_ "time/tzdata" // embed the tz database so Asia/Jakarta always resolves
@@ -64,6 +66,13 @@ func main() {
 		log.Print("nextcloud uploads: disabled (set NEXTCLOUD_URL/USER/APP_PASSWORD to enable)")
 	}
 
+	otelShutdown, otelOn := initOTel(ctx)
+	if otelOn {
+		log.Print("otel metrics: enabled (OTLP export)")
+	} else {
+		log.Print("otel metrics: disabled (set OTEL_EXPORTER_OTLP_ENDPOINT to enable)")
+	}
+
 	app := &App{store: &Store{pool: pool}, tmpl: buildTemplates(), nc: nc}
 
 	staticFS, err := fs.Sub(staticEmbed, "static")
@@ -89,19 +98,32 @@ func main() {
 	mux.HandleFunc("GET /p/{slug}/laporan", app.handleViewReport)
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(staticFS)))
 
-	go pruneSessions(pool)                       // periodically delete expired sessions
-	go serveMetrics(env("METRICS_PORT", "9090")) // Prometheus /metrics on a separate port
+	go pruneSessions(pool) // periodically delete expired sessions
 
 	srv := &http.Server{
 		Addr:              ":" + port,
-		Handler:           logRequests(securityHeaders(app.withUser(metricsMiddleware(mux)))),
+		Handler:           logRequests(securityHeaders(app.withUser(otelMiddleware(mux)))),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       60 * time.Second,  // generous: allows a slow ~5 MB receipt upload
 		WriteTimeout:      120 * time.Second, // generous: allows the Nextcloud round-trip
 		IdleTimeout:       120 * time.Second,
 	}
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("server: %v", err)
+		}
+	}()
 	log.Printf("cashflow listening on http://localhost:%s", port)
-	log.Fatal(srv.ListenAndServe())
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	<-stop
+	log.Print("shutting down")
+	shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_ = srv.Shutdown(shutCtx)
+	_ = otelShutdown(shutCtx)
 }
 
 // securityHeaders sets conservative, app-wide response headers. The CSP is
