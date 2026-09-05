@@ -29,7 +29,7 @@ type App struct {
 }
 
 const (
-	maxUploadBytes = 2 << 20   // 2 MiB per receipt
+	maxUploadBytes = 5 << 20   // 5 MiB per receipt
 	maxFormBytes   = 256 << 10 // 256 KiB cap for ordinary (non-upload) form posts
 	maxTitleLen    = 200
 	maxDescLen     = 1000
@@ -424,7 +424,7 @@ func (a *App) handleAddEntry(w http.ResponseWriter, r *http.Request) {
 	// tolerated too. Only a genuine parse failure (e.g. body too large) errors.
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes+1<<20)
 	if err := r.ParseMultipartForm(4 << 20); err != nil && !errors.Is(err, http.ErrNotMultipart) {
-		a.renderManage(w, r, plan, "Formulir tidak valid atau berkas melebihi batas (maks 2 MB).")
+		a.renderManage(w, r, plan, "Formulir tidak valid atau berkas melebihi batas (maks 5 MB).")
 		return
 	}
 
@@ -485,7 +485,7 @@ func (a *App) handleAddEntry(w http.ResponseWriter, r *http.Request) {
 // public share URL and the (original) display name.
 func (a *App) uploadReceipt(ctx context.Context, subfolder string, file multipart.File, hdr *multipart.FileHeader) (string, string, error) {
 	if hdr.Size > maxUploadBytes {
-		return "", "", fmt.Errorf("berkas melebihi 2 MB")
+		return "", "", fmt.Errorf("berkas melebihi 5 MB")
 	}
 	ext := strings.ToLower(filepath.Ext(hdr.Filename))
 	if !allowedReceiptExt[ext] {
@@ -496,7 +496,7 @@ func (a *App) uploadReceipt(ctx context.Context, subfolder string, file multipar
 		return "", "", err
 	}
 	if int64(len(data)) > maxUploadBytes {
-		return "", "", fmt.Errorf("berkas melebihi 2 MB")
+		return "", "", fmt.Errorf("berkas melebihi 5 MB")
 	}
 	contentType := hdr.Header.Get("Content-Type")
 	if contentType == "" {

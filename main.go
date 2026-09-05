@@ -95,7 +95,7 @@ func main() {
 		Addr:              ":" + port,
 		Handler:           logRequests(securityHeaders(app.withUser(mux))),
 		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       60 * time.Second,  // generous: allows a slow ~2 MB receipt upload
+		ReadTimeout:       60 * time.Second,  // generous: allows a slow ~5 MB receipt upload
 		WriteTimeout:      120 * time.Second, // generous: allows the Nextcloud round-trip
 		IdleTimeout:       120 * time.Second,
 	}

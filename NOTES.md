@@ -18,7 +18,7 @@ public internet.
 ### Quick-win bundle — ✅ DONE 2026-09-05
 `M1, M2, M4, L3, L5, L8` implemented:
 - **M1** — `limitBody` (256 KiB) on register/login/logout/create; entry keeps its
-  2 MB upload cap; server-side rune-length caps on title/desc/party.
+  5 MB upload cap; server-side rune-length caps on title/desc/party.
 - **M2** — `securityHeaders` middleware: strict CSP (`default-src 'self'`; img
   `data:`; `frame-ancestors 'none'`), X-Frame-Options, nosniff, Referrer-Policy.
   Removed the one inline `onclick` so the CSP needs no `unsafe-inline`.
@@ -172,7 +172,7 @@ table (entry_id, url, name, created_at).
 creation, covered by the append-only trigger if on `entries`; add equivalent
 protection if a separate table).
 
-**Security to mind:** validate file type + size (server-side) [done: 2 MB, image/PDF
+**Security to mind:** validate file type + size (server-side) [done: 5 MB, image/PDF
 allowlist, MaxBytesReader on the entry POST]; never expose Nextcloud creds to the
 browser [done: upload is server-side]; store only the link [done].
 - **PRIVACY (important):** receipts are shared via **public** Nextcloud links
