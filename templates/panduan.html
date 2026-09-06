@@ -1,0 +1,94 @@
+{{define "title"}}Panduan Penggunaan &mdash; Cashflow{{end}}
+{{define "content"}}
+<nav class="crumb"><a href="/">&larr; Beranda</a></nav>
+
+<section class="hero">
+  <h1>Panduan Penggunaan</h1>
+  <p>Cara memakai Cashflow dari awal sampai akhir &mdash; mendaftar, membuat cashplan,
+     mencatat transaksi, hingga membuat laporan. Riwayat bersifat <strong>append-only</strong>:
+     tidak bisa dihapus dan jumlahnya tidak bisa diubah, sehingga data tetap jujur dan bisa diaudit.</p>
+</section>
+
+<div class="guide">
+  <div class="gstep">
+    <h3><span class="n">1</span> Daftar atau Masuk</h3>
+    <p>Buat akun dengan <strong>nama pengguna</strong> dan kata sandi (minimal 8 karakter). Nama pengguna
+       bersifat <em>siapa cepat dia dapat</em>. Sudah punya akun? Cukup <a href="/login">Masuk</a>.</p>
+    <p class="muted">Akun hanya diperlukan untuk membuat dan mengelola cashplan. Untuk sekadar melihat
+       sebuah cashplan, Anda cukup memakai tautannya tanpa akun.</p>
+  </div>
+
+  <div class="gstep">
+    <h3><span class="n">2</span> Buat cashplan</h3>
+    <p>Dari dashboard, isi <strong>judul</strong>, deskripsi (opsional), dan <strong>tautan pilihan Anda</strong>
+       (slug), misalnya <code>kas-rt-05</code>. Tautan harus unik dan inilah yang nanti Anda bagikan.</p>
+  </div>
+
+  <div class="gstep">
+    <h3><span class="n">3</span> Catat pemasukan &amp; pengeluaran</h3>
+    <p>Buka cashplan lewat <strong>Kelola</strong>, lalu pakai satu formulir: pilih <strong>Jenis</strong>
+       (Pemasukan atau Pengeluaran). Isi pihak terkait (pembayar untuk pemasukan, penerima untuk pengeluaran),
+       <strong>jumlah</strong> (otomatis diberi pemisah ribuan agar tidak salah nol), tanggal, dan keterangan.</p>
+  </div>
+
+  <div class="gstep">
+    <h3><span class="n">4</span> Lampirkan bukti <span class="muted">(opsional)</span></h3>
+    <p>Bila fitur unggah diaktifkan, sertakan foto atau PDF struk (maks 5&nbsp;MB) saat mencatat transaksi.
+       Berkas disimpan di Nextcloud &mdash; aplikasi hanya menyimpan tautannya, bukan filenya.</p>
+  </div>
+
+  <div class="gstep">
+    <h3><span class="n">5</span> Lihat ringkasan &amp; rincian per pembayar</h3>
+    <p>Halaman cashplan menampilkan total pemasukan, pengeluaran, saldo, dan jumlah pembayar.
+       <strong>Rincian per pembayar</strong> memperlihatkan berapa kontribusi tiap orang.</p>
+  </div>
+
+  <div class="gstep">
+    <h3><span class="n">6</span> Telusuri riwayat</h3>
+    <p>Semua transaksi tampil dengan yang terbaru di atas. Jika daftarnya panjang, gunakan kolom
+       <strong>pencarian</strong> dan navigasi <strong>halaman</strong> di bawah tabel.</p>
+  </div>
+
+  <div class="gstep">
+    <h3><span class="n">7</span> Ubah entri bila perlu</h3>
+    <p>Klik <strong>Ubah</strong> pada sebuah entri untuk memperbaiki pihak, keterangan, atau tanggal.
+       <strong>Jumlah dan jenis terkunci</strong> demi transparansi. Setiap perubahan disimpan sebagai
+       <strong>versi baru</strong>, dan entri yang pernah diubah ditandai <em>(telah diperbarui)</em>.</p>
+    <p class="muted">Lupa melampirkan bukti? Anda bisa <strong>menambahkannya saat mengubah</strong> &mdash;
+       tetapi bukti hanya bisa ditambahkan sekali, lalu ikut terkunci.</p>
+  </div>
+
+  <div class="gstep">
+    <h3><span class="n">8</span> Lihat detail &amp; riwayat versi</h3>
+    <p>Klik <strong>Detail</strong> untuk melihat nilai terkini beserta seluruh versi sebelumnya &mdash;
+       lengkap dengan <strong>siapa</strong> yang mengubah dan <strong>kapan</strong>.</p>
+  </div>
+
+  <div class="gstep">
+    <h3><span class="n">9</span> Buat laporan</h3>
+    <p>Halaman <strong>Laporan</strong> membuat rekap untuk <strong>rentang tanggal</strong> pilihan Anda
+       (misalnya September&ndash;Desember 2026), dengan rincian <strong>per minggu</strong> yang dikelompokkan
+       per pembayar/penerima, plus daftar pengeluaran. Cocok untuk laporan keuangan.</p>
+  </div>
+
+  <div class="gstep">
+    <h3><span class="n">10</span> Bagikan tautan</h3>
+    <p>Bagikan tautan cashplan Anda. <strong>Pemilik</strong> bisa menyunting; <strong>pemegang tautan</strong>
+       hanya bisa melihat. Semua orang melihat riwayat yang sama &mdash; itulah inti transparansinya.</p>
+  </div>
+</div>
+
+<section class="card" style="margin-top:18px; text-align:center;">
+  {{if .Username}}
+    <p>Siap mencatat? Buka dashboard Anda.</p>
+    <a href="/" class="btn primary">Ke Dashboard</a>
+  {{else}}
+    <p>Siap mulai? Buat akun gratis Anda.</p>
+    <div class="cta">
+      <a href="/register" class="btn primary">Daftar gratis</a>
+      <a href="/login" class="btn">Masuk</a>
+    </div>
+  {{end}}
+  <p class="muted small" style="margin-top:12px;">Ada pertanyaan atau menemukan masalah? <a href="/masukan">Kirim masukan</a>.</p>
+</section>
+{{end}}

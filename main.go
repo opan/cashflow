@@ -85,6 +85,9 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", app.handleHome)
+	// Static info pages (public)
+	mux.HandleFunc("GET /panduan", app.handlePanduan)
+	mux.HandleFunc("GET /masukan", app.handleMasukan)
 	// Auth
 	mux.HandleFunc("GET /register", app.handleRegisterForm)
 	mux.HandleFunc("POST /register", app.handleRegister)

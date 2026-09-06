@@ -62,7 +62,7 @@ func buildTemplates() map[string]*template.Template {
 	pages := map[string]*template.Template{}
 	// Each page gets its own template set (layout + partials + that page) so
 	// their "content"/"title" blocks don't collide.
-	for _, name := range []string{"landing", "login", "register", "dashboard", "manage", "view", "laporan", "edit", "versions", "notfound"} {
+	for _, name := range []string{"landing", "login", "register", "dashboard", "manage", "view", "laporan", "edit", "versions", "panduan", "masukan", "notfound"} {
 		t := template.New(name).Funcs(funcs)
 		t = template.Must(t.ParseFS(tmplFS,
 			"templates/layout.html",
@@ -109,6 +109,16 @@ func (a *App) renderStatus(w http.ResponseWriter, r *http.Request, name string, 
 
 func (a *App) notFound(w http.ResponseWriter, r *http.Request) {
 	a.renderStatus(w, r, "notfound", nil, http.StatusNotFound)
+}
+
+// Static info pages. They carry no view model; the templates use only the
+// cross-cutting .Username from pageData.
+func (a *App) handlePanduan(w http.ResponseWriter, r *http.Request) {
+	a.render(w, r, "panduan", nil)
+}
+
+func (a *App) handleMasukan(w http.ResponseWriter, r *http.Request) {
+	a.render(w, r, "masukan", nil)
 }
 
 // --- View models ---

@@ -12,6 +12,7 @@
     <div class="wrap bar">
       <a class="brand" href="/">💰 Cashflow</a>
       <nav class="nav">
+        <a href="/panduan">Panduan</a>
         {{if .Username}}
           <span class="who" title="{{.Username}}">{{.Username}}</span>
           <form method="post" action="/logout" class="inline"><button class="linkbtn" type="submit">Keluar</button></form>
@@ -25,7 +26,10 @@
   <main class="wrap">
     {{block "content" .}}{{end}}
   </main>
-  <footer class="foot"><div class="wrap">Cashflow &middot; catat, bagikan, transparan.</div></footer>
+  <footer class="foot"><div class="wrap">
+    <nav class="footnav"><a href="/panduan">Panduan</a><a href="/masukan">Masukan</a></nav>
+    <div>Cashflow &middot; catat, bagikan, transparan.</div>
+  </div></footer>
   <script src="/static/app.js"></script>
 </body>
 </html>{{end}}

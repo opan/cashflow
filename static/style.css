@@ -342,3 +342,25 @@ table.matrix th, table.matrix td { white-space: nowrap; }
 .rowactions { white-space: nowrap; text-align: right; }
 .rowactions .btn + .btn { margin-left: 6px; }
 .editedbadge { display: inline-block; margin-left: 4px; font-size: .7rem; font-weight: 700; color: #92400e; background: #fef3c7; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+
+/* Footer nav (Panduan / Masukan) */
+.footnav { display: flex; gap: 18px; justify-content: center; margin-bottom: 8px; }
+.footnav a { color: var(--muted); text-decoration: none; font-weight: 600; }
+.footnav a:hover { color: var(--brand); text-decoration: underline; }
+
+/* User guide (Panduan) */
+.guide { display: grid; gap: 14px; margin-top: 10px; }
+.gstep { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
+.gstep h3 { margin: 0 0 8px; font-size: 1.06rem; display: flex; align-items: center; gap: 10px; }
+.gstep h3 .n { display: inline-grid; place-items: center; min-width: 26px; height: 26px; border-radius: 999px;
+  background: var(--brand); color: #fff; font-size: .82rem; font-weight: 700; flex: none; }
+.gstep p { margin: 0; color: var(--muted); font-size: .95rem; line-height: 1.55; }
+.gstep p + p { margin-top: 8px; }
+.gstep code { background: #f1f5f9; border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; font-size: .88em; }
+
+/* Contact / feedback cards (Masukan) */
+.contactcard { text-align: center; }
+.contactcard .ico { font-size: 2rem; line-height: 1; margin-bottom: 6px; }
+.contactcard h3 { margin: 0 0 6px; font-size: 1.1rem; }
+.contactcard p { margin: 0 0 14px; }
+.contactcard .btn { width: 100%; }
