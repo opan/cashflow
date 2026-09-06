@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{block "title" .}}Cashflow{{end}}</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>">
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v={{.AssetVer}}">
 </head>
 <body>
   <header class="topbar">
@@ -30,6 +30,6 @@
     <nav class="footnav"><a href="/panduan">Panduan</a><a href="/masukan">Masukan</a></nav>
     <div>Cashflow &middot; catat, bagikan, transparan.</div>
   </div></footer>
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v={{.AssetVer}}"></script>
 </body>
 </html>{{end}}

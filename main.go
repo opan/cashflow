@@ -3,7 +3,9 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"fmt"
 	"io/fs"
 	"log"
@@ -73,7 +75,7 @@ func main() {
 		log.Print("otel metrics: disabled (set OTEL_EXPORTER_OTLP_ENDPOINT to enable)")
 	}
 
-	app := &App{store: &Store{pool: pool}, tmpl: buildTemplates(), nc: nc}
+	app := &App{store: &Store{pool: pool}, tmpl: buildTemplates(), nc: nc, assetVer: assetVersion("static/style.css", "static/app.js")}
 	if otelOn {
 		registerBusinessMetrics(app.store)
 	}
@@ -106,7 +108,7 @@ func main() {
 	mux.HandleFunc("GET /p/{slug}", app.handleView)
 	mux.HandleFunc("GET /p/{slug}/laporan", app.handleViewReport)
 	mux.HandleFunc("GET /p/{slug}/entry/{id}", app.handleViewEntryDetail)
-	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(staticFS)))
+	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheStatic(http.FileServerFS(staticFS))))
 
 	go pruneSessions(pool) // periodically delete expired sessions
 
@@ -182,6 +184,33 @@ func env(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// assetVersion returns a short content hash of the given embedded static files.
+// It's appended as ?v=... to asset URLs so a new deploy busts browser/CDN caches
+// the moment the bytes change, while unchanged assets stay cached.
+func assetVersion(paths ...string) string {
+	h := sha256.New()
+	for _, p := range paths {
+		b, err := staticEmbed.ReadFile(p)
+		if err != nil {
+			log.Printf("asset version: %s: %v", p, err)
+			continue
+		}
+		h.Write(b)
+	}
+	return hex.EncodeToString(h.Sum(nil))[:10]
+}
+
+// cacheStatic marks versioned asset responses (requested with ?v=) as immutable
+// and long-lived; the ?v hash changes whenever the content does, so this is safe.
+func cacheStatic(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("v") != "" {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // loadDotenv reads simple KEY=VALUE lines from a .env file (if present) and sets

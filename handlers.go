@@ -24,9 +24,10 @@ import (
 
 // App wires the store, templates, and optional Nextcloud client into HTTP handlers.
 type App struct {
-	store *Store
-	tmpl  map[string]*template.Template
-	nc    *Nextcloud // nil when uploads are not configured
+	store    *Store
+	tmpl     map[string]*template.Template
+	nc       *Nextcloud // nil when uploads are not configured
+	assetVer string     // content hash appended to static asset URLs for cache-busting
 }
 
 const (
@@ -77,6 +78,7 @@ func buildTemplates() map[string]*template.Template {
 // pageData wraps every page's view model with cross-cutting state (login).
 type pageData struct {
 	Username string
+	AssetVer string
 	Data     any
 }
 
@@ -90,7 +92,7 @@ func (a *App) renderStatus(w http.ResponseWriter, r *http.Request, name string, 
 		http.Error(w, "template not found: "+name, http.StatusInternalServerError)
 		return
 	}
-	pd := pageData{Data: data}
+	pd := pageData{Data: data, AssetVer: a.assetVer}
 	if u := currentUser(r); u != nil {
 		pd.Username = u.Username
 	}
