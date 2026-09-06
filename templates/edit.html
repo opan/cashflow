@@ -15,7 +15,7 @@
     <div><span class="lbl">Jenis</span><strong>{{if .Data.Entry.IsIncome}}Pemasukan{{else}}Pengeluaran{{end}}</strong></div>
     <div><span class="lbl">Jumlah</span><strong>{{rupiah .Data.Entry.Amount}}</strong></div>
   </div>
-  <form method="post" action="/kelola/{{.Data.Plan.Slug}}/entry/{{.Data.Entry.ID}}/edit" class="stack">
+  <form method="post" action="/kelola/{{.Data.Plan.Slug}}/entry/{{.Data.Entry.ID}}/edit" class="stack" enctype="multipart/form-data">
     {{if .Data.Entry.IsIncome}}
     <label>Pembayar
       <input type="text" name="party" value="{{.Data.Entry.Party}}" required maxlength="200">
@@ -34,6 +34,15 @@
     <label>Tanggal
       <input type="date" name="date" value="{{iso .Data.Entry.OccurredAt}}">
     </label>
+    {{if .Data.Entry.HasAttachment}}
+    <div class="lockrow">
+      <div><span class="lbl">Bukti</span><a href="{{.Data.Entry.AttachmentURL}}" target="_blank" rel="noopener noreferrer">&#128206; {{.Data.Entry.AttachmentName}}</a> <span class="muted small">terkunci</span></div>
+    </div>
+    {{else if .Data.CanAttach}}
+    <label>Bukti transaksi <span class="muted">(opsional &mdash; gambar atau PDF, maks 5 MB &mdash; hanya bisa ditambahkan sekali)</span>
+      <input type="file" name="receipt" accept="image/*,application/pdf,.heic">
+    </label>
+    {{end}}
     <button class="btn primary" type="submit">Simpan perubahan</button>
   </form>
 </section>

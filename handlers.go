@@ -689,10 +689,11 @@ func buildKeterangan(s Summary) string {
 // --- Edit an entry (party/description/date) + version history ---
 
 type editVM struct {
-	Plan  *CashPlan
-	Entry *Entry
-	Today string
-	Err   string
+	Plan      *CashPlan
+	Entry     *Entry
+	Today     string
+	CanAttach bool // Nextcloud enabled and the entry has no receipt yet
+	Err       string
 }
 
 type entryDetailVM struct {
@@ -716,7 +717,12 @@ func (a *App) handleEditEntryForm(w http.ResponseWriter, r *http.Request) {
 		a.notFound(w, r)
 		return
 	}
-	a.render(w, r, "edit", editVM{Plan: plan, Entry: entry, Today: time.Now().In(jakarta).Format("2006-01-02")})
+	a.render(w, r, "edit", editVM{
+		Plan:      plan,
+		Entry:     entry,
+		Today:     time.Now().In(jakarta).Format("2006-01-02"),
+		CanAttach: a.nc.Enabled() && !entry.HasAttachment(),
+	})
 }
 
 func (a *App) handleEditEntry(w http.ResponseWriter, r *http.Request) {
@@ -729,7 +735,21 @@ func (a *App) handleEditEntry(w http.ResponseWriter, r *http.Request) {
 		a.notFound(w, r)
 		return
 	}
-	limitBody(w, r, maxFormBytes)
+	// A receipt may be added here only if the entry has none yet (the DB trigger
+	// enforces this too). When attaching, the form is multipart, so cap and parse
+	// it like add-entry; otherwise keep the small plain-form cap.
+	canAttach := a.nc.Enabled() && !entry.HasAttachment()
+	today := time.Now().In(jakarta).Format("2006-01-02")
+	if canAttach {
+		r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes+1<<20)
+		if err := r.ParseMultipartForm(4 << 20); err != nil && !errors.Is(err, http.ErrNotMultipart) {
+			a.render(w, r, "edit", editVM{Plan: plan, Entry: entry, Today: today, CanAttach: canAttach,
+				Err: "Formulir tidak valid atau berkas melebihi batas (maks 5 MB)."})
+			return
+		}
+	} else {
+		limitBody(w, r, maxFormBytes)
+	}
 	party := strings.TrimSpace(r.FormValue("party"))
 	desc := strings.TrimSpace(r.FormValue("description"))
 	date := parseDate(r.FormValue("date"))
@@ -737,7 +757,7 @@ func (a *App) handleEditEntry(w http.ResponseWriter, r *http.Request) {
 	fail := func(msg string) {
 		e := *entry // keep entered values on the form
 		e.Party, e.Description, e.OccurredAt = party, desc, date
-		a.render(w, r, "edit", editVM{Plan: plan, Entry: &e, Today: time.Now().In(jakarta).Format("2006-01-02"), Err: msg})
+		a.render(w, r, "edit", editVM{Plan: plan, Entry: &e, Today: today, CanAttach: canAttach, Err: msg})
 	}
 	switch {
 	case entry.IsIncome() && party == "":
@@ -753,11 +773,30 @@ func (a *App) handleEditEntry(w http.ResponseWriter, r *http.Request) {
 		fail("Keterangan terlalu panjang (maksimal 1000 karakter).")
 		return
 	}
+	// Optional receipt: uploaded only after the fields validate, so nothing is
+	// stored for a rejected submission.
+	var attURL, attName string
+	if canAttach {
+		if file, hdr, err := r.FormFile("receipt"); err == nil {
+			defer file.Close()
+			url, name, upErr := a.uploadReceipt(r.Context(), plan.Slug, file, hdr)
+			if upErr != nil {
+				log.Printf("upload receipt (edit): %v", upErr)
+				fail("Gagal mengunggah bukti: " + upErr.Error() + ". Perubahan belum disimpan.")
+				return
+			}
+			attURL, attName = url, name
+		} else if !errors.Is(err, http.ErrMissingFile) && !errors.Is(err, http.ErrNotMultipart) {
+			fail("Berkas bukti tidak dapat dibaca.")
+			return
+		}
+	}
+
 	editor := ""
 	if u := currentUser(r); u != nil {
 		editor = u.Username
 	}
-	if _, err := a.store.EditEntry(r.Context(), entry.ID, plan.ID, party, desc, date, editor); err != nil {
+	if _, err := a.store.EditEntry(r.Context(), entry.ID, plan.ID, party, desc, date, editor, attURL, attName); err != nil {
 		log.Printf("edit entry: %v", err)
 		fail("Gagal menyimpan perubahan.")
 		return

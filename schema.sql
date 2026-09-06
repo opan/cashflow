@@ -70,9 +70,10 @@ CREATE TRIGGER entry_revisions_immutable
     FOR EACH ROW EXECUTE FUNCTION entries_no_modify();
 
 -- Truthfulness guarantee: entries can never be deleted, and amount/type/
--- attachment/created_at are immutable. Only party/description/occurred_at may be
--- updated, and each such update snapshots the previous values into
--- entry_revisions so the full history is preserved and visible.
+-- created_at are permanently immutable. party/description/occurred_at may be
+-- updated (each update snapshots the previous values into entry_revisions), and
+-- a receipt may be attached once if it was missing -- but never changed or
+-- removed once set. The full history is thus preserved and visible.
 CREATE OR REPLACE FUNCTION entries_guard() RETURNS trigger AS $$
 BEGIN
     IF TG_OP = 'DELETE' THEN
@@ -81,10 +82,16 @@ BEGIN
     IF NEW.amount IS DISTINCT FROM OLD.amount
        OR NEW.type IS DISTINCT FROM OLD.type
        OR NEW.cashplan_id IS DISTINCT FROM OLD.cashplan_id
-       OR NEW.created_at IS DISTINCT FROM OLD.created_at
-       OR NEW.attachment_url IS DISTINCT FROM OLD.attachment_url
-       OR NEW.attachment_name IS DISTINCT FROM OLD.attachment_name THEN
-        RAISE EXCEPTION 'only party, description, and occurred_at may be edited';
+       OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+        RAISE EXCEPTION 'amount, type, cashplan and created_at are immutable';
+    END IF;
+    -- A receipt may be added later (empty -> value), e.g. when a forgotten
+    -- receipt is attached via edit. Once set it is locked, so supporting
+    -- evidence can never be swapped out or removed.
+    IF COALESCE(OLD.attachment_url, '') <> ''
+       AND (NEW.attachment_url IS DISTINCT FROM OLD.attachment_url
+            OR NEW.attachment_name IS DISTINCT FROM OLD.attachment_name) THEN
+        RAISE EXCEPTION 'attachment cannot be changed once set';
     END IF;
     IF NEW.party IS DISTINCT FROM OLD.party
        OR NEW.description IS DISTINCT FROM OLD.description

@@ -432,7 +432,10 @@ func (s *Store) EntryByID(ctx context.Context, entryID string) (*Entry, error) {
 // amount/type/attachment. The cashplan_id predicate enforces ownership. The
 // editor is passed to the trigger via a transaction-local setting. Returns rows
 // affected.
-func (s *Store) EditEntry(ctx context.Context, entryID, planID, party, desc string, occurred time.Time, editor string) (int64, error) {
+// EditEntry updates the editable fields (party/description/occurred_at). When
+// attURL is non-empty it also attaches a receipt; the trigger permits this only
+// if the entry has none yet. Empty attURL leaves any existing attachment intact.
+func (s *Store) EditEntry(ctx context.Context, entryID, planID, party, desc string, occurred time.Time, editor, attURL, attName string) (int64, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return 0, err
@@ -444,9 +447,11 @@ func (s *Store) EditEntry(ctx context.Context, entryID, planID, party, desc stri
 		return 0, err
 	}
 	ct, err := tx.Exec(ctx,
-		`UPDATE entries SET party = $1, description = $2, occurred_at = $3
+		`UPDATE entries SET party = $1, description = $2, occurred_at = $3,
+		        attachment_url  = CASE WHEN $6 <> '' THEN $6 ELSE attachment_url  END,
+		        attachment_name = CASE WHEN $6 <> '' THEN $7 ELSE attachment_name END
 		 WHERE id = $4 AND cashplan_id = $5`,
-		party, desc, occurred.Format("2006-01-02"), entryID, planID)
+		party, desc, occurred.Format("2006-01-02"), entryID, planID, attURL, attName)
 	if err != nil {
 		return 0, err
 	}
