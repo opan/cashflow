@@ -63,7 +63,7 @@ func buildTemplates() map[string]*template.Template {
 	pages := map[string]*template.Template{}
 	// Each page gets its own template set (layout + partials + that page) so
 	// their "content"/"title" blocks don't collide.
-	for _, name := range []string{"landing", "login", "register", "dashboard", "manage", "view", "laporan", "edit", "versions", "iuran", "panduan", "masukan", "notfound"} {
+	for _, name := range []string{"landing", "login", "register", "dashboard", "manage", "view", "laporan", "edit", "versions", "iuran", "panduan", "masukan", "fitur_iuran", "notfound"} {
 		t := template.New(name).Funcs(funcs)
 		t = template.Must(t.ParseFS(tmplFS,
 			"templates/layout.html",
@@ -121,6 +121,10 @@ func (a *App) handlePanduan(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) handleMasukan(w http.ResponseWriter, r *http.Request) {
 	a.render(w, r, "masukan", nil)
+}
+
+func (a *App) handleFiturIuran(w http.ResponseWriter, r *http.Request) {
+	a.render(w, r, "fitur_iuran", nil)
 }
 
 // --- View models ---

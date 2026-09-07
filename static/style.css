@@ -381,3 +381,16 @@ table.dues td.lunas { color: var(--income); font-weight: 700; }
 table.dues td.sebagian { color: #92400e; background: #fef3c7; font-variant-numeric: tabular-nums; font-size: .82rem; }
 table.dues td.belum { color: var(--muted); }
 table.dues td.status, table.dues th.status { white-space: nowrap; font-size: .85rem; color: var(--muted); }
+
+/* Feature spotlight (homepage) + feature-page eyebrow */
+.eyebrow { text-transform: uppercase; letter-spacing: .06em; font-size: .72rem; font-weight: 700; color: var(--brand); margin: 0 0 4px; }
+.spotlight { display: flex; gap: 20px; align-items: center; margin-top: 18px; padding: 22px 24px;
+  background: #ecfdf5; border: 1px solid #b7e4d8; border-radius: var(--radius); }
+.spot-ico { font-size: 2.6rem; line-height: 1; flex: none; }
+.spot-body h2 { margin: 2px 0 8px; font-size: 1.3rem; }
+.spot-body p { color: var(--muted); margin: 0 0 14px; }
+.spot-body .btn { margin: 0; }
+@media (max-width: 640px) {
+  .spotlight { flex-direction: column; align-items: flex-start; gap: 10px; padding: 18px; }
+  .spot-ico { font-size: 2.2rem; }
+}

@@ -90,6 +90,7 @@ func main() {
 	// Static info pages (public)
 	mux.HandleFunc("GET /panduan", app.handlePanduan)
 	mux.HandleFunc("GET /masukan", app.handleMasukan)
+	mux.HandleFunc("GET /fitur/iuran", app.handleFiturIuran)
 	// Auth
 	mux.HandleFunc("GET /register", app.handleRegisterForm)
 	mux.HandleFunc("POST /register", app.handleRegister)

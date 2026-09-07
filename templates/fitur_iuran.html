@@ -1,0 +1,66 @@
+{{define "title"}}Fitur: Iuran Rutin &mdash; Cashflow{{end}}
+{{define "content"}}
+<nav class="crumb"><a href="/">&larr; Beranda</a></nav>
+
+<section class="hero">
+  <p class="eyebrow">🔁 Fitur unggulan</p>
+  <h1>Lacak iuran rutin, tahu siapa yang sudah lunas</h1>
+  <p>Cocok untuk iuran warga/RT, arisan, kas kelas atau organisasi, hingga langganan &amp; cicilan.
+     Catat pembayaran seperti biasa &mdash; Cashflow yang menghitung cakupannya per periode dan
+     menampilkan status tiap orang.</p>
+  <div class="cta">
+    <a href="/register" class="btn primary">Coba gratis</a>
+    <a href="/panduan" class="btn">Baca panduan</a>
+  </div>
+</section>
+
+<section class="steps">
+  <div class="step"><span class="n">1</span><p>Tetapkan <strong>jumlah iuran</strong> dan <strong>periode</strong> &mdash; mingguan, bulanan, dwibulanan, triwulanan, atau tahunan &mdash; beserta tanggal mulai.</p></div>
+  <div class="step"><span class="n">2</span><p>Susun <strong>daftar anggota</strong> yang wajib membayar.</p></div>
+  <div class="step"><span class="n">3</span><p>Catat pemasukan seperti biasa. Status tiap anggota <strong>terhitung otomatis</strong>.</p></div>
+</section>
+
+<section class="card">
+  <div class="cardhead"><h3>Contoh</h3><span class="muted small">Iuran Rp30.000 / bulan</span></div>
+  <p class="muted">Andi membayar Rp70.000 sekaligus. Pembayaran ditumpuk berurutan: dua bulan penuh
+     plus Rp10.000 di bulan ketiga (kurang Rp20.000 agar lunas). Budi belum membayar.</p>
+  <div class="tablewrap">
+    <table class="datatable dues">
+      <thead>
+        <tr><th class="member">Anggota</th><th class="num">Sep 2026</th><th class="num">Okt 2026</th><th class="num">Nov 2026</th><th class="status">Status</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="member">Andi</td>
+          <td class="num lunas" title="Lunas">&#10003;</td>
+          <td class="num lunas" title="Lunas">&#10003;</td>
+          <td class="num sebagian" title="Kurang Rp 20.000">Rp 10.000</td>
+          <td class="status">Lunas s/d Oktober 2026, kurang Rp 20.000 untuk November 2026</td>
+        </tr>
+        <tr>
+          <td class="member">Budi</td>
+          <td class="num belum">&mdash;</td>
+          <td class="num belum">&mdash;</td>
+          <td class="num belum">&mdash;</td>
+          <td class="status">Belum bayar</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="muted small">&#10003; = lunas &middot; angka = pembayaran sebagian (kurang dari iuran) &middot; &mdash; = belum bayar</p>
+</section>
+
+<section class="steps">
+  <div class="step"><p><strong>Otomatis.</strong> Cukup catat pemasukan; cakupan per periode dihitung sendiri secara kumulatif.</p></div>
+  <div class="step"><p><strong>Transparan.</strong> Anggota dapat memeriksa statusnya lewat <strong>tautan publik</strong> (hanya-lihat).</p></div>
+  <div class="step"><p><strong>Jujur.</strong> Riwayat <em>append-only</em> dan jumlah terkunci, jadi data tidak bisa dimanipulasi.</p></div>
+</section>
+
+<section class="card" style="text-align:center;">
+  <p>Siap merapikan iuran Anda?</p>
+  <div class="cta" style="justify-content:center;">
+    <a href="/register" class="btn primary">Daftar gratis</a>
+    <a href="/login" class="btn">Masuk</a>
+  </div>
+</section>
+{{end}}
