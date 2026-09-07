@@ -101,12 +101,17 @@ func main() {
 	mux.HandleFunc("GET /kelola/{slug}", app.handleManage)
 	mux.HandleFunc("POST /kelola/{slug}/entry", app.handleAddEntry)
 	mux.HandleFunc("GET /kelola/{slug}/laporan", app.handleManageReport)
+	mux.HandleFunc("GET /kelola/{slug}/iuran", app.handleManageDues)
+	mux.HandleFunc("POST /kelola/{slug}/iuran/config", app.handleDuesConfig)
+	mux.HandleFunc("POST /kelola/{slug}/iuran/members", app.handleAddMember)
+	mux.HandleFunc("POST /kelola/{slug}/iuran/members/{id}/delete", app.handleRemoveMember)
 	mux.HandleFunc("GET /kelola/{slug}/entry/{id}", app.handleManageEntryDetail)
 	mux.HandleFunc("GET /kelola/{slug}/entry/{id}/edit", app.handleEditEntryForm)
 	mux.HandleFunc("POST /kelola/{slug}/entry/{id}/edit", app.handleEditEntry)
 	// Public view
 	mux.HandleFunc("GET /p/{slug}", app.handleView)
 	mux.HandleFunc("GET /p/{slug}/laporan", app.handleViewReport)
+	mux.HandleFunc("GET /p/{slug}/iuran", app.handleViewDues)
 	mux.HandleFunc("GET /p/{slug}/entry/{id}", app.handleViewEntryDetail)
 	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheStatic(http.FileServerFS(staticFS))))
 

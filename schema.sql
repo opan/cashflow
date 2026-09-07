@@ -43,6 +43,23 @@ CREATE INDEX IF NOT EXISTS entries_plan_idx
 ALTER TABLE entries ADD COLUMN IF NOT EXISTS attachment_url  text NOT NULL DEFAULT '';
 ALTER TABLE entries ADD COLUMN IF NOT EXISTS attachment_name text NOT NULL DEFAULT '';
 
+-- Recurring dues (iuran) config on a cashplan. due_amount = 0 disables it.
+-- due_period is one of: weekly, monthly, bimonthly, quarterly, yearly.
+ALTER TABLE cashplans ADD COLUMN IF NOT EXISTS due_amount bigint NOT NULL DEFAULT 0;
+ALTER TABLE cashplans ADD COLUMN IF NOT EXISTS due_period text   NOT NULL DEFAULT '';
+ALTER TABLE cashplans ADD COLUMN IF NOT EXISTS due_start  date;
+
+-- Member roster for dues tracking. Owner-maintained; each member is matched to
+-- income entries by normalized payer name. These are editable settings (a member
+-- may be added or removed), so no append-only trigger applies here.
+CREATE TABLE IF NOT EXISTS members (
+    id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    cashplan_id uuid        NOT NULL REFERENCES cashplans(id) ON DELETE CASCADE,
+    name        text        NOT NULL,
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS members_plan_name ON members (cashplan_id, lower(btrim(name)));
+
 -- Version history: each edit snapshots the entry's PREVIOUS party/description/
 -- occurred_at here (append-only). The live values stay on entries.
 CREATE TABLE IF NOT EXISTS entry_revisions (

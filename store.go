@@ -35,6 +35,15 @@ type CashPlan struct {
 	Title       string
 	Description string
 	CreatedAt   time.Time
+	// Recurring dues (iuran) config; DueAmount == 0 means the feature is off.
+	DueAmount int64
+	DuePeriod string
+	DueStart  time.Time // zero value when unset (NULL)
+}
+
+// DuesEnabled reports whether dues tracking is configured for this cashplan.
+func (p *CashPlan) DuesEnabled() bool {
+	return p.DueAmount > 0 && p.DuePeriod != "" && !p.DueStart.IsZero()
 }
 
 type Entry struct {
@@ -192,12 +201,18 @@ func (s *Store) CreatePlan(ctx context.Context, ownerID, slug, title, desc strin
 
 func (s *Store) PlanBySlug(ctx context.Context, slug string) (*CashPlan, error) {
 	p := &CashPlan{}
+	var dueStart *time.Time
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, owner_id, slug, title, description, created_at
+		`SELECT id, owner_id, slug, title, description, created_at,
+		        due_amount, due_period, due_start
 		 FROM cashplans WHERE slug = $1`, slug,
-	).Scan(&p.ID, &p.OwnerID, &p.Slug, &p.Title, &p.Description, &p.CreatedAt)
+	).Scan(&p.ID, &p.OwnerID, &p.Slug, &p.Title, &p.Description, &p.CreatedAt,
+		&p.DueAmount, &p.DuePeriod, &dueStart)
 	if err != nil {
 		return nil, err
+	}
+	if dueStart != nil {
+		p.DueStart = *dueStart
 	}
 	return p, nil
 }

@@ -364,3 +364,20 @@ table.matrix th, table.matrix td { white-space: nowrap; }
 .contactcard h3 { margin: 0 0 6px; font-size: 1.1rem; }
 .contactcard p { margin: 0 0 14px; }
 .contactcard .btn { width: 100%; }
+
+/* Dues / iuran */
+.inlineform { display: flex; gap: 8px; margin-bottom: 12px; }
+.inlineform input[type="text"] { flex: 1; min-width: 0; }
+.memberlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.memberlist li { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; }
+.linkbtn.danger { color: var(--expense); }
+.linkbtn.danger:hover { text-decoration: underline; }
+
+table.dues th.member, table.dues td.member { position: sticky; left: 0; background: var(--card);
+  font-weight: 600; white-space: nowrap; }
+table.dues th.num, table.dues td.num { text-align: center; white-space: nowrap; min-width: 64px; }
+table.dues td.lunas { color: var(--income); font-weight: 700; }
+table.dues td.sebagian { color: #92400e; background: #fef3c7; font-variant-numeric: tabular-nums; font-size: .82rem; }
+table.dues td.belum { color: var(--muted); }
+table.dues td.status, table.dues th.status { white-space: nowrap; font-size: .85rem; color: var(--muted); }

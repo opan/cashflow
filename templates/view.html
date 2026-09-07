@@ -8,7 +8,10 @@
   <span class="badge view">Mode Lihat</span>
 </div>
 
-<div class="actions"><a class="btn" href="/p/{{.Data.Plan.Slug}}/laporan">&#128196; Lihat Laporan</a></div>
+<div class="actions">
+  <a class="btn" href="/p/{{.Data.Plan.Slug}}/laporan">&#128196; Lihat Laporan</a>
+  {{if .Data.Plan.DuesEnabled}}<a class="btn" href="/p/{{.Data.Plan.Slug}}/iuran">&#128202; Status Iuran</a>{{end}}
+</div>
 
 <p class="muted">Anda melihat cashplan ini dalam mode baca-saja. Riwayat bersifat append-only, jadi data yang Anda lihat sama untuk semua orang.</p>
 

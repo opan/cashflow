@@ -63,7 +63,7 @@ func buildTemplates() map[string]*template.Template {
 	pages := map[string]*template.Template{}
 	// Each page gets its own template set (layout + partials + that page) so
 	// their "content"/"title" blocks don't collide.
-	for _, name := range []string{"landing", "login", "register", "dashboard", "manage", "view", "laporan", "edit", "versions", "panduan", "masukan", "notfound"} {
+	for _, name := range []string{"landing", "login", "register", "dashboard", "manage", "view", "laporan", "edit", "versions", "iuran", "panduan", "masukan", "notfound"} {
 		t := template.New(name).Funcs(funcs)
 		t = template.Must(t.ParseFS(tmplFS,
 			"templates/layout.html",
@@ -141,7 +141,8 @@ type manageVM struct {
 	History  HistoryView
 	ShareURL string
 	Today    string
-	Uploads  bool // whether receipt uploads are configured
+	Uploads  bool     // whether receipt uploads are configured
+	Members  []Member // dues roster, for the payer suggestions datalist
 	Err      string
 }
 
@@ -485,6 +486,12 @@ func (a *App) renderManage(w http.ResponseWriter, r *http.Request, plan *CashPla
 	if err != nil {
 		log.Printf("entries page: %v", err)
 	}
+	var members []Member
+	if plan.DuesEnabled() {
+		if members, err = a.store.ListMembers(r.Context(), plan.ID); err != nil {
+			log.Printf("list members: %v", err)
+		}
+	}
 	a.render(w, r, "manage", manageVM{
 		Plan:     plan,
 		Summary:  sum,
@@ -493,6 +500,7 @@ func (a *App) renderManage(w http.ResponseWriter, r *http.Request, plan *CashPla
 		ShareURL: baseURL(r) + "/p/" + plan.Slug,
 		Today:    time.Now().In(jakarta).Format("2006-01-02"),
 		Uploads:  a.nc.Enabled(),
+		Members:  members,
 		Err:      errMsg,
 	})
 }

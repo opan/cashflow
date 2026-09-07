@@ -10,7 +10,10 @@
   <span class="badge owner">Mode Pemilik</span>
 </div>
 
-<div class="actions"><a class="btn" href="/kelola/{{.Data.Plan.Slug}}/laporan">&#128196; Lihat Laporan</a></div>
+<div class="actions">
+  <a class="btn" href="/kelola/{{.Data.Plan.Slug}}/laporan">&#128196; Lihat Laporan</a>
+  <a class="btn" href="/kelola/{{.Data.Plan.Slug}}/iuran">&#128202; Status Iuran</a>
+</div>
 
 {{if .Data.Err}}<div class="alert error">{{.Data.Err}}</div>{{end}}
 
@@ -36,7 +39,8 @@
     </label>
     <label>
       <span class="lbltext" data-income="Pembayar" data-expense="Penerima (opsional)">Pembayar</span>
-      <input type="text" name="party" id="partyInput" placeholder="cth: Budi" maxlength="200" required>
+      <input type="text" name="party" id="partyInput" placeholder="cth: Budi" maxlength="200" required{{if .Data.Members}} list="memberlist"{{end}}>
+      {{if .Data.Members}}<datalist id="memberlist">{{range .Data.Members}}<option value="{{.Name}}"></option>{{end}}</datalist>{{end}}
     </label>
     <label>Jumlah (Rp)
       <input type="text" name="amount" class="amount-input" inputmode="numeric" autocomplete="off" placeholder="cth: 50.000" required>

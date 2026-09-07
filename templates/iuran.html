@@ -1,0 +1,111 @@
+{{define "title"}}Status Iuran &mdash; {{.Data.Plan.Title}}{{end}}
+{{define "content"}}
+<nav class="crumb"><a href="{{.Data.BasePath}}">&larr; Kembali</a></nav>
+
+<div class="planhead">
+  <div>
+    <h1>Status Iuran</h1>
+    <p class="muted">{{.Data.Plan.Title}}</p>
+  </div>
+  {{if .Data.Owner}}<span class="badge owner">Mode Pemilik</span>{{else}}<span class="badge view">Mode Lihat</span>{{end}}
+</div>
+
+{{if .Data.Err}}<div class="alert error">{{.Data.Err}}</div>{{end}}
+
+{{if .Data.Owner}}
+<section class="card">
+  <div class="cardhead"><h3>Pengaturan iuran</h3></div>
+  <form method="post" action="{{.Data.BasePath}}/iuran/config" class="stack">
+    <div class="grid2">
+      <label>Jumlah iuran per periode
+        <input type="text" name="amount" inputmode="numeric" placeholder="cth: 30.000" required
+               value="{{if .Data.Plan.DueAmount}}{{.Data.Plan.DueAmount}}{{end}}">
+      </label>
+      <label>Periode
+        <select name="period">
+          <option value="weekly"{{if eq .Data.Plan.DuePeriod "weekly"}} selected{{end}}>Mingguan</option>
+          <option value="monthly"{{if or (eq .Data.Plan.DuePeriod "monthly") (not .Data.Plan.DuesEnabled)}} selected{{end}}>Bulanan</option>
+          <option value="bimonthly"{{if eq .Data.Plan.DuePeriod "bimonthly"}} selected{{end}}>Dwibulanan (2 bulan)</option>
+          <option value="quarterly"{{if eq .Data.Plan.DuePeriod "quarterly"}} selected{{end}}>Triwulanan (3 bulan)</option>
+          <option value="yearly"{{if eq .Data.Plan.DuePeriod "yearly"}} selected{{end}}>Tahunan</option>
+        </select>
+      </label>
+    </div>
+    <label>Mulai dari
+      <input type="date" name="start" required
+             value="{{if .Data.Plan.DuesEnabled}}{{iso .Data.Plan.DueStart}}{{else}}{{.Data.Today}}{{end}}">
+    </label>
+    <div class="actions">
+      <button class="btn primary" type="submit">Simpan pengaturan</button>
+      {{if .Data.Plan.DuesEnabled}}<button class="btn ghost" type="submit" name="action" value="disable">Nonaktifkan</button>{{end}}
+    </div>
+  </form>
+</section>
+
+<section class="card">
+  <div class="cardhead"><h3>Anggota</h3><span class="muted small">{{len .Data.Members}} anggota</span></div>
+  <form method="post" action="{{.Data.BasePath}}/iuran/members" class="inlineform">
+    <input type="text" name="name" placeholder="Nama anggota" maxlength="200" required>
+    <button class="btn" type="submit">Tambah</button>
+  </form>
+  {{if .Data.Members}}
+  <ul class="memberlist">
+    {{range .Data.Members}}
+    <li>
+      <span>{{.Name}}</span>
+      <form method="post" action="{{$.Data.BasePath}}/iuran/members/{{.ID}}/delete" class="inline"
+            onsubmit="return confirm('Hapus anggota {{.Name}}?')">
+        <button class="linkbtn danger" type="submit">Hapus</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="muted small">Belum ada anggota. Tambahkan nama orang yang wajib membayar iuran &mdash; namanya harus sama dengan yang dipakai sebagai pembayar pada transaksi.</p>
+  {{end}}
+</section>
+{{end}}
+
+{{if .Data.Plan.DuesEnabled}}
+  {{if .Data.Table.Rows}}
+  <section class="card">
+    <div class="cardhead">
+      <h3>Rekap pembayaran</h3>
+      <span class="muted small">{{rupiah .Data.Table.Due}} &middot; {{.Data.Table.PeriodLabel}} &middot; mulai {{.Data.Table.StartLabel}}</span>
+    </div>
+    <div class="tablewrap">
+      <table class="datatable dues">
+        <thead>
+          <tr>
+            <th class="member">Anggota</th>
+            {{range .Data.Table.Columns}}<th class="num">{{.}}</th>{{end}}
+            <th class="status">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Data.Table.Rows}}
+          <tr>
+            <td class="member">{{.Member}}</td>
+            {{range .Cells}}
+              {{if eq .Status "lunas"}}<td class="num lunas" title="Lunas">&#10003;</td>
+              {{else if eq .Status "sebagian"}}<td class="num sebagian" title="Kurang {{rupiah .Short}}">{{rupiah .Paid}}</td>
+              {{else}}<td class="num belum">&mdash;</td>{{end}}
+            {{end}}
+            <td class="status">{{.StatusText}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{if .Data.Table.Truncated}}<p class="muted small">Menampilkan {{len .Data.Table.Columns}} periode pertama.</p>{{end}}
+    <p class="muted small">&#10003; = lunas &middot; angka = pembayaran sebagian (kurang dari iuran) &middot; &mdash; = belum bayar</p>
+  </section>
+  {{else}}
+  <section class="card"><p class="muted">Belum ada anggota untuk ditampilkan.{{if .Data.Owner}} Tambahkan anggota di atas.{{end}}</p></section>
+  {{end}}
+{{else}}
+  <section class="card">
+    <p class="muted">Fitur iuran belum diaktifkan untuk cashplan ini.{{if not .Data.Owner}} Hubungi pemilik cashplan bila ini seharusnya aktif.{{end}}</p>
+  </section>
+{{end}}
+{{end}}
