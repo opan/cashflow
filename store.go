@@ -217,6 +217,15 @@ func (s *Store) PlanBySlug(ctx context.Context, slug string) (*CashPlan, error) 
 	return p, nil
 }
 
+// UpdatePlanDetails renames a cashplan (title + description). The slug — and thus
+// the share URL — is intentionally left unchanged.
+func (s *Store) UpdatePlanDetails(ctx context.Context, planID, title, desc string) error {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE cashplans SET title = $2, description = $3 WHERE id = $1`,
+		planID, title, desc)
+	return err
+}
+
 // PlansByOwner returns the owner's plans, each with a computed summary.
 func (s *Store) PlansByOwner(ctx context.Context, ownerID string) ([]PlanCard, error) {
 	rows, err := s.pool.Query(ctx,

@@ -63,7 +63,7 @@ func buildTemplates() map[string]*template.Template {
 	pages := map[string]*template.Template{}
 	// Each page gets its own template set (layout + partials + that page) so
 	// their "content"/"title" blocks don't collide.
-	for _, name := range []string{"landing", "login", "register", "dashboard", "manage", "view", "laporan", "edit", "versions", "iuran", "panduan", "masukan", "fitur_iuran", "notfound"} {
+	for _, name := range []string{"landing", "login", "register", "dashboard", "manage", "planedit", "view", "laporan", "edit", "versions", "iuran", "panduan", "masukan", "fitur_iuran", "notfound"} {
 		t := template.New(name).Funcs(funcs)
 		t = template.Must(t.ParseFS(tmplFS,
 			"templates/layout.html",
@@ -466,6 +466,52 @@ func (a *App) ownedPlan(w http.ResponseWriter, r *http.Request) *CashPlan {
 		return nil
 	}
 	return plan
+}
+
+type planEditVM struct {
+	Plan *CashPlan
+	Err  string
+}
+
+func (a *App) handleEditPlanForm(w http.ResponseWriter, r *http.Request) {
+	plan := a.ownedPlan(w, r)
+	if plan == nil {
+		return
+	}
+	a.render(w, r, "planedit", planEditVM{Plan: plan})
+}
+
+func (a *App) handleEditPlan(w http.ResponseWriter, r *http.Request) {
+	plan := a.ownedPlan(w, r)
+	if plan == nil {
+		return
+	}
+	limitBody(w, r, maxFormBytes)
+	title := strings.TrimSpace(r.FormValue("title"))
+	desc := strings.TrimSpace(r.FormValue("description"))
+
+	fail := func(msg string) {
+		p := *plan // keep entered values on the form
+		p.Title, p.Description = title, desc
+		a.render(w, r, "planedit", planEditVM{Plan: &p, Err: msg})
+	}
+	switch {
+	case title == "":
+		fail("Nama cashplan wajib diisi.")
+		return
+	case tooLong(title, maxTitleLen):
+		fail("Nama cashplan terlalu panjang (maksimal 200 karakter).")
+		return
+	case tooLong(desc, maxDescLen):
+		fail("Deskripsi terlalu panjang (maksimal 1000 karakter).")
+		return
+	}
+	if err := a.store.UpdatePlanDetails(r.Context(), plan.ID, title, desc); err != nil {
+		log.Printf("update plan: %v", err)
+		fail("Gagal menyimpan perubahan.")
+		return
+	}
+	http.Redirect(w, r, "/kelola/"+plan.Slug, http.StatusSeeOther)
 }
 
 func (a *App) handleManage(w http.ResponseWriter, r *http.Request) {

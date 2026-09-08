@@ -1,0 +1,27 @@
+{{define "title"}}Ubah cashplan &mdash; {{.Data.Plan.Title}}{{end}}
+{{define "content"}}
+<nav class="crumb"><a href="/kelola/{{.Data.Plan.Slug}}">&larr; Kembali</a></nav>
+
+<div class="planhead">
+  <h1>Ubah cashplan</h1>
+  <span class="badge owner">Mode Pemilik</span>
+</div>
+
+{{if .Data.Err}}<div class="alert error">{{.Data.Err}}</div>{{end}}
+
+<section class="card">
+  <p class="muted small">Mengganti nama <strong>tidak</strong> mengubah tautan berbagi &mdash; tautannya tetap sama.</p>
+  <form method="post" action="/kelola/{{.Data.Plan.Slug}}/edit" class="stack">
+    <label>Nama cashplan
+      <input type="text" name="title" value="{{.Data.Plan.Title}}" required maxlength="200">
+    </label>
+    <label>Deskripsi <span class="muted">(opsional)</span>
+      <input type="text" name="description" value="{{.Data.Plan.Description}}" maxlength="1000">
+    </label>
+    <div class="lockrow">
+      <div><span class="lbl">Tautan berbagi (terkunci)</span><strong>/p/{{.Data.Plan.Slug}}</strong></div>
+    </div>
+    <button class="btn primary" type="submit">Simpan perubahan</button>
+  </form>
+</section>
+{{end}}

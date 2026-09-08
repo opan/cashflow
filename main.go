@@ -100,6 +100,8 @@ func main() {
 	// Cashplans (owner)
 	mux.HandleFunc("POST /cashplans", app.handleCreate)
 	mux.HandleFunc("GET /kelola/{slug}", app.handleManage)
+	mux.HandleFunc("GET /kelola/{slug}/edit", app.handleEditPlanForm)
+	mux.HandleFunc("POST /kelola/{slug}/edit", app.handleEditPlan)
 	mux.HandleFunc("POST /kelola/{slug}/entry", app.handleAddEntry)
 	mux.HandleFunc("GET /kelola/{slug}/laporan", app.handleManageReport)
 	mux.HandleFunc("GET /kelola/{slug}/iuran", app.handleManageDues)
