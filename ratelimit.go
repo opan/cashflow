@@ -19,7 +19,11 @@ type RateLimiter struct {
 	enabled bool
 	url     string
 	token   string
-	client  *http.Client
+	// clientIPHeader is a forwarding header an operator has explicitly opted to
+	// trust for the real client IP (e.g. "CF-Connecting-IP" behind Cloudflare).
+	// Empty means trust nothing and use the direct connection address.
+	clientIPHeader string
+	client         *http.Client
 }
 
 // NewRateLimiterFromEnv builds the limiter from AIO_RATELIMIT_* env vars. It is
@@ -31,9 +35,10 @@ func NewRateLimiterFromEnv() *RateLimiter {
 	token := strings.TrimSpace(env("AIO_RATELIMIT_TOKEN", ""))
 	enabled := isTruthy(env("AIO_RATELIMIT_ENABLED", "")) && url != "" && token != ""
 	return &RateLimiter{
-		enabled: enabled,
-		url:     url,
-		token:   token,
+		enabled:        enabled,
+		url:            url,
+		token:          token,
+		clientIPHeader: strings.TrimSpace(env("AIO_RATELIMIT_CLIENT_IP_HEADER", "")),
 		// A tight timeout keeps a slow/unreachable aio off the request hot path;
 		// on timeout we fail open.
 		client: &http.Client{Timeout: 250 * time.Millisecond},
@@ -105,15 +110,24 @@ func isTruthy(s string) bool {
 	return false
 }
 
-// clientIP resolves the caller's IP for ip-scoped buckets. It prefers the
-// left-most X-Forwarded-For entry, then X-Real-IP, then RemoteAddr — cashflow
-// resolves its own IP because aio only ever sees the string cashflow sends.
-func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		return strings.TrimSpace(strings.SplitN(xff, ",", 2)[0])
-	}
-	if xrip := r.Header.Get("X-Real-IP"); xrip != "" {
-		return strings.TrimSpace(xrip)
+// ClientIP resolves the caller's IP for ip-scoped buckets. Forwarding headers
+// are trusted ONLY when an operator has named one via AIO_RATELIMIT_CLIENT_IP_HEADER
+// (e.g. "CF-Connecting-IP" behind Cloudflare, or "X-Real-IP" behind a proxy that
+// sets it authoritatively). That header must be one your edge sets from the real
+// connection and does not pass through unverified from the client — otherwise a
+// caller could spoof it to evade or misattribute the limit. Never point it at
+// X-Forwarded-For, whose left-most entry is client-controlled.
+//
+// With no trusted header configured (or the header absent on a request) it falls
+// back to the direct connection address (RemoteAddr): unspoofable, but behind a
+// proxy every client collapses into one bucket — so set the header in any real
+// deployment. cashflow resolves its own IP because aio only sees what we send.
+func (rl *RateLimiter) ClientIP(r *http.Request) string {
+	if rl != nil && rl.clientIPHeader != "" {
+		if v := r.Header.Get(rl.clientIPHeader); v != "" {
+			// Defensive: if a multi-value header slips through, take the first entry.
+			return strings.TrimSpace(strings.SplitN(v, ",", 2)[0])
+		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {

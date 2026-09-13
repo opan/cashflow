@@ -674,7 +674,7 @@ func (a *App) uploadReceipt(ctx context.Context, subfolder string, file multipar
 func (a *App) handleView(w http.ResponseWriter, r *http.Request) {
 	// External rate limit on public views, keyed by client IP (no-op when
 	// disabled). A denial returns 429 with Retry-After.
-	if allowed, retryAfter := a.rl.Allow(r.Context(), "cashflow.share.view.ip", "ip:"+clientIP(r)); !allowed {
+	if allowed, retryAfter := a.rl.Allow(r.Context(), "cashflow.share.view.ip", "ip:"+a.rl.ClientIP(r)); !allowed {
 		if retryAfter > 0 {
 			w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
 		}
