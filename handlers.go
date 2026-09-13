@@ -26,8 +26,9 @@ import (
 type App struct {
 	store    *Store
 	tmpl     map[string]*template.Template
-	nc       *Nextcloud // nil when uploads are not configured
-	assetVer string     // content hash appended to static asset URLs for cache-busting
+	nc       *Nextcloud   // nil when uploads are not configured
+	rl       *RateLimiter // external rate limiting via all-in-one; no-op when disabled
+	assetVer string       // content hash appended to static asset URLs for cache-busting
 }
 
 const (
@@ -440,6 +441,14 @@ func (a *App) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// External rate limit (no-op when disabled). Checked after validation so a
+	// malformed submission doesn't consume the daily quota; a denial refuses
+	// the create rather than counting an attempt.
+	if allowed, _ := a.rl.Allow(r.Context(), "cashflow.plan.create", "user:"+u.ID); !allowed {
+		fail("Batas pembuatan cashplan harian tercapai. Coba lagi besok.")
+		return
+	}
+
 	plan, err := a.store.CreatePlan(r.Context(), u.ID, slug, title, desc)
 	if errors.Is(err, ErrSlugTaken) {
 		fail("Tautan \"" + slug + "\" sudah dipakai. Pilih yang lain.")
@@ -595,6 +604,15 @@ func (a *App) handleAddEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// External rate limit (no-op when disabled). Checked after validation and
+	// before any receipt upload, so a denial costs no work and refuses the entry.
+	if u := currentUser(r); u != nil {
+		if allowed, _ := a.rl.Allow(r.Context(), "cashflow.entry.create", "user:"+u.ID); !allowed {
+			a.renderManage(w, r, plan, "Batas pencatatan transaksi harian tercapai. Coba lagi besok.")
+			return
+		}
+	}
+
 	// Optional receipt: only after the entry fields validate, so nothing is
 	// uploaded for a submission that gets rejected.
 	var attURL, attName string
@@ -654,6 +672,16 @@ func (a *App) uploadReceipt(ctx context.Context, subfolder string, file multipar
 // --- Public view ---
 
 func (a *App) handleView(w http.ResponseWriter, r *http.Request) {
+	// External rate limit on public views, keyed by client IP (no-op when
+	// disabled). A denial returns 429 with Retry-After.
+	if allowed, retryAfter := a.rl.Allow(r.Context(), "cashflow.share.view.ip", "ip:"+clientIP(r)); !allowed {
+		if retryAfter > 0 {
+			w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+		}
+		http.Error(w, "Terlalu banyak permintaan. Coba lagi sebentar.", http.StatusTooManyRequests)
+		return
+	}
+
 	plan, err := a.store.PlanBySlug(r.Context(), r.PathValue("slug"))
 	if err != nil {
 		a.notFound(w, r)
