@@ -75,7 +75,14 @@ func main() {
 		log.Print("otel metrics: disabled (set OTEL_EXPORTER_OTLP_ENDPOINT to enable)")
 	}
 
-	app := &App{store: &Store{pool: pool}, tmpl: buildTemplates(), nc: nc, assetVer: assetVersion("static/style.css", "static/app.js")}
+	rl := NewRateLimiterFromEnv()
+	if rl.Enabled() {
+		log.Print("external rate limiting: enabled (all-in-one)")
+	} else {
+		log.Print("external rate limiting: disabled (set AIO_RATELIMIT_ENABLED/URL/TOKEN to enable)")
+	}
+
+	app := &App{store: &Store{pool: pool}, tmpl: buildTemplates(), nc: nc, rl: rl, assetVer: assetVersion("static/style.css", "static/app.js")}
 	if otelOn {
 		registerBusinessMetrics(app.store)
 	}
