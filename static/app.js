@@ -57,6 +57,21 @@ document.addEventListener('click', function (e) {
   }
   sel.addEventListener('change', apply);
   apply();
+
+  // Prevent duplicate submissions: on a slow network the page appears to hang,
+  // so users re-click. Lock the button on the first (valid) submit. Constraint
+  // validation failures don't fire 'submit', so the button stays usable then.
+  var submitting = false;
+  form.addEventListener('submit', function (e) {
+    if (submitting) { e.preventDefault(); return; }
+    submitting = true;
+    if (submit) { submit.disabled = true; submit.textContent = 'Menyimpan…'; }
+  });
+  // Re-enable if the page is restored from the bfcache (e.g. browser Back),
+  // otherwise the returned form would be stuck disabled.
+  window.addEventListener('pageshow', function (e) {
+    if (e.persisted) { submitting = false; if (submit) submit.disabled = false; apply(); }
+  });
 })();
 
 // Print button on the report page.
