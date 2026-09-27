@@ -6,7 +6,8 @@ sekolah anak") dengan tautan pilihan Anda, catat pemasukan & pengeluaran, lalu
 bagikan tautannya. Riwayat bersifat **append-only** — tidak bisa diubah atau
 dihapus, sehingga semua orang melihat data yang sama.
 
-> Antarmuka aplikasi berbahasa Indonesia. Dokumen ini dwibahasa.
+> Antarmuka aplikasi berbahasa Indonesia. Dokumen ini tersedia dalam dua bahasa:
+> **Bahasa Indonesia** · [English](README.en.md)
 
 ## Fitur
 

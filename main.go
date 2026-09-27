@@ -82,7 +82,7 @@ func main() {
 		log.Print("external rate limiting: disabled (set AIO_RATELIMIT_ENABLED/URL/TOKEN to enable)")
 	}
 
-	app := &App{store: &Store{pool: pool}, tmpl: buildTemplates(), nc: nc, rl: rl, assetVer: assetVersion("static/style.css", "static/app.js")}
+	app := &App{store: &Store{pool: pool}, tmpl: buildTemplates(), nc: nc, rl: rl, guard: newSubmitGuard(24 * time.Hour), assetVer: assetVersion("static/style.css", "static/app.js")}
 	if otelOn {
 		registerBusinessMetrics(app.store)
 	}

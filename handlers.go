@@ -28,6 +28,7 @@ type App struct {
 	tmpl     map[string]*template.Template
 	nc       *Nextcloud   // nil when uploads are not configured
 	rl       *RateLimiter // external rate limiting via all-in-one; no-op when disabled
+	guard    *submitGuard // one-time form tokens; makes entry submission idempotent
 	assetVer string       // content hash appended to static asset URLs for cache-busting
 }
 
@@ -140,15 +141,16 @@ type dashboardVM struct {
 }
 
 type manageVM struct {
-	Plan     *CashPlan
-	Summary  Summary
-	Payers   []PayerTotal
-	History  HistoryView
-	ShareURL string
-	Today    string
-	Uploads  bool     // whether receipt uploads are configured
-	Members  []Member // dues roster, for the payer suggestions datalist
-	Err      string
+	Plan      *CashPlan
+	Summary   Summary
+	Payers    []PayerTotal
+	History   HistoryView
+	ShareURL  string
+	Today     string
+	Uploads   bool     // whether receipt uploads are configured
+	Members   []Member // dues roster, for the payer suggestions datalist
+	FormToken string   // one-time token so a re-submitted form creates one entry
+	Err       string
 }
 
 type viewVM struct {
@@ -552,15 +554,16 @@ func (a *App) renderManage(w http.ResponseWriter, r *http.Request, plan *CashPla
 		}
 	}
 	a.render(w, r, "manage", manageVM{
-		Plan:     plan,
-		Summary:  sum,
-		Payers:   payers,
-		History:  buildHistoryView(ep, q, "/kelola/"+plan.Slug, true),
-		ShareURL: baseURL(r) + "/p/" + plan.Slug,
-		Today:    time.Now().In(jakarta).Format("2006-01-02"),
-		Uploads:  a.nc.Enabled(),
-		Members:  members,
-		Err:      errMsg,
+		Plan:      plan,
+		Summary:   sum,
+		Payers:    payers,
+		History:   buildHistoryView(ep, q, "/kelola/"+plan.Slug, true),
+		ShareURL:  baseURL(r) + "/p/" + plan.Slug,
+		Today:     time.Now().In(jakarta).Format("2006-01-02"),
+		Uploads:   a.nc.Enabled(),
+		Members:   members,
+		FormToken: newToken(),
+		Err:       errMsg,
 	})
 }
 
@@ -601,6 +604,16 @@ func (a *App) handleAddEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	case tooLong(desc, maxDescLen):
 		a.renderManage(w, r, plan, "Keterangan terlalu panjang (maksimal 1000 karakter).")
+		return
+	}
+
+	// Idempotency guard: the form carries a one-time token. A double-submit (slow
+	// network + impatient re-click, or a resent POST) repeats the same token, so
+	// only the first is saved; the rest redirect as a no-op. Placed before the
+	// receipt upload so a duplicate never re-uploads the file. An empty token
+	// (e.g. a stale cached form) skips the guard rather than losing the entry.
+	if token := r.FormValue("form_token"); token != "" && !a.guard.firstUse(token) {
+		http.Redirect(w, r, "/kelola/"+plan.Slug, http.StatusSeeOther)
 		return
 	}
 

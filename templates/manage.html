@@ -32,6 +32,7 @@
 <section class="card">
   <div class="cardhead"><h3>Tambah transaksi</h3></div>
   <form method="post" action="/kelola/{{.Data.Plan.Slug}}/entry" class="stack" id="entryForm" enctype="multipart/form-data">
+    <input type="hidden" name="form_token" value="{{.Data.FormToken}}">
     <label>Jenis
       <select name="type" id="typeSel">
         <option value="income">Pemasukan (uang masuk)</option>
