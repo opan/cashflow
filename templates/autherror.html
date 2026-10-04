@@ -1,0 +1,9 @@
+{{define "title"}}Masuk &mdash; Cashflow{{end}}
+{{define "content"}}
+<section class="card authcard">
+  <h1>Tidak bisa masuk</h1>
+  <div class="alert error">{{.Data.Message}}</div>
+  <a class="btn primary" href="/auth/login">Coba lagi</a>
+  <p class="muted small"><a href="/">Kembali ke beranda</a></p>
+</section>
+{{end}}

@@ -82,7 +82,17 @@ func main() {
 		log.Print("external rate limiting: disabled (set AIO_RATELIMIT_ENABLED/URL/TOKEN to enable)")
 	}
 
-	app := &App{store: &Store{pool: pool}, tmpl: buildTemplates(), nc: nc, rl: rl, guard: newSubmitGuard(24 * time.Hour), assetVer: assetVersion("static/style.css", "static/app.js")}
+	aio, err := NewAioAuthFromEnv()
+	if err != nil {
+		log.Fatalf("auth config: %v", err)
+	}
+	if aio.Enabled() {
+		log.Printf("login: through all-in-one (%s)", aio.issuer)
+	} else {
+		log.Print("login: local username/password (set AUTH_PROVIDER=aio to log in through all-in-one)")
+	}
+
+	app := &App{store: &Store{pool: pool}, tmpl: buildTemplates(), nc: nc, rl: rl, aio: aio, guard: newSubmitGuard(24 * time.Hour), assetVer: assetVersion("static/style.css", "static/app.js")}
 	if otelOn {
 		registerBusinessMetrics(app.store)
 	}
@@ -104,6 +114,8 @@ func main() {
 	mux.HandleFunc("GET /login", app.handleLoginForm)
 	mux.HandleFunc("POST /login", app.handleLogin)
 	mux.HandleFunc("POST /logout", app.handleLogout)
+	mux.HandleFunc("GET /auth/login", app.handleAuthLogin)
+	mux.HandleFunc("GET /auth/callback", app.handleAuthCallback)
 	// Cashplans (owner)
 	mux.HandleFunc("POST /cashplans", app.handleCreate)
 	mux.HandleFunc("GET /kelola/{slug}", app.handleManage)
