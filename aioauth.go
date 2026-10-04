@@ -77,6 +77,18 @@ func NewAioAuthFromEnv() (*AioAuth, error) {
 
 func (a *AioAuth) Enabled() bool { return a != nil && a.enabled }
 
+// origin is aio's scheme://host[:port] ("" when disabled), for the CSP.
+func (a *AioAuth) origin() string {
+	if !a.Enabled() {
+		return ""
+	}
+	u, err := url.Parse(a.issuer)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
+}
+
 // discover fetches aio's discovery document and keys on first use. If aio is
 // down it returns an error and is retried on the next login attempt, so
 // cashflow can start (and serve logged-in users) while aio is unavailable.

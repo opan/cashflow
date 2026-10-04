@@ -1,6 +1,8 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -93,5 +95,21 @@ func TestLogoutURL(t *testing.T) {
 	}
 	if a.logoutURL("") != "" {
 		t.Error("no ID token (a local session) means nothing to tell aio")
+	}
+}
+
+func TestSecurityHeaders_FormActionAllowsAioOnlyWhenEnabled(t *testing.T) {
+	csp := func(a *AioAuth) string {
+		rr := httptest.NewRecorder()
+		securityHeaders(a.origin(), http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).
+			ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/", nil))
+		return rr.Header().Get("Content-Security-Policy")
+	}
+	if got := csp(&AioAuth{}); !strings.Contains(got, "form-action 'self';") {
+		t.Errorf("local login keeps form-action 'self' only, got %q", got)
+	}
+	got := csp(&AioAuth{enabled: true, issuer: "https://auth.example.com"})
+	if !strings.Contains(got, "form-action 'self' https://auth.example.com;") {
+		t.Errorf("aio login must allow the logout redirect to aio, got %q", got)
 	}
 }
