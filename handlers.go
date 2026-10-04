@@ -360,7 +360,7 @@ func (a *App) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	recordUserCreated(r.Context())
-	if err := a.startSession(w, r, u.ID); err != nil {
+	if err := a.startSession(w, r, u.ID, ""); err != nil {
 		log.Printf("start session: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -391,7 +391,7 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	if err := a.startSession(w, r, u.ID); err != nil {
+	if err := a.startSession(w, r, u.ID, ""); err != nil {
 		log.Printf("start session: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
