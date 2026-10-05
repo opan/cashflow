@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestLocalUsername(t *testing.T) {
@@ -25,6 +28,57 @@ func TestLocalUsername(t *testing.T) {
 	}
 }
 
+func TestSuffixedUsername(t *testing.T) {
+	sub := "a1b2c3d4-e5f6-0000-0000-000000000000"
+	if got := suffixedUsername("budi", sub); got != "budi_a1b2c3d4" {
+		t.Errorf("short name: got %q", got)
+	}
+	got := suffixedUsername(strings.Repeat("x", 30), sub)
+	if want := strings.Repeat("x", 21) + "_a1b2c3d4"; got != want {
+		t.Errorf("long name: got %q, want %q", got, want)
+	}
+	if err := validateUsername(got); err != nil {
+		t.Errorf("suffixed name %q breaks cashflow's own rules: %v", got, err)
+	}
+}
+
+func TestNextOrHome(t *testing.T) {
+	for in, want := range map[string]string{"": "/", "/kelola/kas": "/kelola/kas", "//evil.example.com": "/", "/\t/evil.example.com": "/"} {
+		if got := nextOrHome(in); got != want {
+			t.Errorf("nextOrHome(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// While aio is down, each login must wait only for its own discovery
+// attempt, not for every attempt queued ahead of it.
+func TestDiscover_ConcurrentAttemptsDontQueue(t *testing.T) {
+	const delay = 300 * time.Millisecond
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(delay)
+		http.Error(w, "down", http.StatusServiceUnavailable)
+	}))
+	defer slow.Close()
+	a := &AioAuth{enabled: true, issuer: slow.URL}
+
+	const n = 5
+	start := time.Now()
+	var wg sync.WaitGroup
+	for range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := a.discover(context.Background()); err == nil {
+				t.Error("discovery against a failing aio must fail")
+			}
+		}()
+	}
+	wg.Wait()
+	if elapsed := time.Since(start); elapsed > 3*delay {
+		t.Errorf("%d concurrent attempts took %v; they are queueing behind one another", n, elapsed)
+	}
+}
+
 func TestSafeNext(t *testing.T) {
 	cases := map[string]string{
 		"/kelola/kas":          "/kelola/kas",
@@ -34,6 +88,13 @@ func TestSafeNext(t *testing.T) {
 		"/\\evil.example.com":  "",
 		"https://evil.example": "",
 		"kelola/kas":           "",
+		// Browsers drop tabs/newlines and read "\\" as "/", so these are "//evil.example.com".
+		"/\t/evil.example.com": "",
+		"/\n/evil.example.com": "",
+		"/\r/evil.example.com": "",
+		"/a\\b":                "",
+		"/\x7f":                "",
+		"/kelola?tab=1#x":      "/kelola?tab=1#x",
 	}
 	for in, want := range cases {
 		if got := safeNext(in); got != want {

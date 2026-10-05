@@ -380,7 +380,7 @@ func (a *App) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) handleLoginForm(w http.ResponseWriter, r *http.Request) {
 	if currentUser(r) != nil {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		http.Redirect(w, r, nextOrHome(r.URL.Query().Get("next")), http.StatusSeeOther)
 		return
 	}
 	if a.aio.Enabled() {
@@ -429,7 +429,16 @@ func (a *App) handleLogout(w http.ResponseWriter, r *http.Request) {
 	var aioLogout string
 	if a.aio.Enabled() {
 		if c, err := r.Cookie(sessionCookie); err == nil {
-			if idToken, err := a.store.SessionIDToken(r.Context(), c.Value); err == nil {
+			if idToken, err := a.store.SessionIDToken(r.Context(), c.Value); err == nil && idToken != "" {
+				// After a restart nothing has run discovery yet; without it the
+				// logout would end only cashflow's session and single sign-on
+				// would log the user straight back in. If aio is down, fall back
+				// to logging out of cashflow only.
+				ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+				if err := a.aio.discover(ctx); err != nil {
+					log.Printf("aio logout: %v", err)
+				}
+				cancel()
 				aioLogout = a.aio.logoutURL(idToken)
 			}
 		}

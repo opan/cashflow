@@ -92,10 +92,10 @@ func (a *AioAuth) origin() string {
 // discover fetches aio's discovery document and keys on first use. If aio is
 // down it returns an error and is retried on the next login attempt, so
 // cashflow can start (and serve logged-in users) while aio is unavailable.
+// The network call runs outside the lock, so while aio is down each request
+// waits for its own attempt rather than for everyone queued ahead of it.
 func (a *AioAuth) discover(ctx context.Context) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.ready {
+	if a.isReady() {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -108,6 +108,12 @@ func (a *AioAuth) discover(ctx context.Context) error {
 		EndSession string `json:"end_session_endpoint"`
 	}
 	_ = p.Claims(&extra)
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.ready {
+		return nil
+	}
 	a.oauth = oauth2.Config{
 		ClientID:     a.clientID,
 		ClientSecret: a.clientSecret,
@@ -119,6 +125,12 @@ func (a *AioAuth) discover(ctx context.Context) error {
 	a.endSessionURL = extra.EndSession
 	a.ready = true
 	return nil
+}
+
+func (a *AioAuth) isReady() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.ready
 }
 
 // loginState travels in a short-lived HttpOnly cookie between /auth/login and
@@ -147,8 +159,15 @@ func decodeLoginState(raw string) (loginState, error) {
 }
 
 // safeNext keeps only same-site paths, so ?next= can't redirect off-site.
+// Browsers treat a backslash like a slash and drop tabs and newlines, so
+// "/\\evil.com" or "/\t/evil.com" would read as "//evil.com"; url.Parse
+// rejects every other control character.
 func safeNext(raw string) string {
-	if !strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, "//") || strings.HasPrefix(raw, "/\\") {
+	if !strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, "//") || strings.ContainsAny(raw, "\\\t\r\n") {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "" || u.Host != "" {
 		return ""
 	}
 	return raw
@@ -173,6 +192,16 @@ func localUsername(preferred, sub string) string {
 		name = "user_" + shortID(sub)
 	}
 	return name
+}
+
+// suffixedUsername keeps two aio accounts that want the same name distinct,
+// trimming the name so the result still fits cashflow's 30-character limit.
+func suffixedUsername(name, sub string) string {
+	id := shortID(sub)
+	if max := 30 - 1 - len(id); len(name) > max {
+		name = name[:max]
+	}
+	return name + "_" + id
 }
 
 func shortID(sub string) string {
@@ -201,7 +230,7 @@ func (a *App) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if currentUser(r) != nil {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		http.Redirect(w, r, nextOrHome(r.URL.Query().Get("next")), http.StatusSeeOther)
 		return
 	}
 	if err := a.aio.discover(r.Context()); err != nil {
@@ -288,11 +317,14 @@ func (a *App) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "gagal masuk", http.StatusInternalServerError)
 		return
 	}
-	next := st.Next
-	if next == "" {
-		next = "/"
+	http.Redirect(w, r, nextOrHome(st.Next), http.StatusSeeOther)
+}
+
+func nextOrHome(raw string) string {
+	if next := safeNext(raw); next != "" {
+		return next
 	}
-	http.Redirect(w, r, next, http.StatusSeeOther)
+	return "/"
 }
 
 // linkedUser returns the local user for an aio account, creating it on first
@@ -311,6 +343,11 @@ func (a *App) linkedUser(ctx context.Context, sub, preferred string) (*User, err
 	if !errors.Is(err, ErrUsernameTaken) {
 		return u, err
 	}
+	// The unique index that fired may be aio_user_id's: a simultaneous first
+	// login for the same aio account created the user first.
+	if u, err := a.store.UserByAioID(ctx, sub); err == nil {
+		return u, nil
+	}
 	_, ownerAioID, err := a.store.UsernameOwner(ctx, name)
 	if err != nil {
 		return nil, err
@@ -319,7 +356,13 @@ func (a *App) linkedUser(ctx context.Context, sub, preferred string) (*User, err
 		return nil, errUnlinkedAccount
 	}
 	// Taken by another aio account (e.g. a renamed one): keep both distinct.
-	return a.store.CreateAioUser(ctx, sub, name+"_"+shortID(sub))
+	u, err = a.store.CreateAioUser(ctx, sub, suffixedUsername(name, sub))
+	if errors.Is(err, ErrUsernameTaken) {
+		if winner, lookupErr := a.store.UserByAioID(ctx, sub); lookupErr == nil {
+			return winner, nil
+		}
+	}
+	return u, err
 }
 
 // aioLogoutURL is where to send the browser after ending the local session,
