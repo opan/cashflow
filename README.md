@@ -111,6 +111,7 @@ mengubah amount/type atau menghapus entri akan ditolak database.
 
 ```
 main.go            Konfigurasi, koneksi DB, routing, middleware
+cli.go             Perintah admin (user:reset-password)
 handlers.go        HTTP handler + rendering template
 auth.go            Hash kata sandi (bcrypt), sesi cookie, middleware user
 store.go           Lapisan akses data (users, sessions, cashplans, entries)
@@ -137,6 +138,27 @@ entry_revisions(id, entry_id, party, description, occurred_at, revised_at)
 
 `party` = pembayar (income) / penerima (expense). `description` = catatan (income)
 / keterangan-alasan (expense).
+
+## Admin: reset kata sandi
+
+Tidak ada fitur lupa kata sandi; admin bisa mengatur kata sandi baru dari baris perintah.
+Perintah ini memakai `DATABASE_URL` yang sama dengan server, menanyakan kata sandi baru
+dua kali (tidak ditampilkan), lalu mengeluarkan pengguna dari semua sesinya.
+
+```bash
+# Kubernetes (pod sudah punya DATABASE_URL)
+kubectl -n app exec -it deploy/cashflow -- /cashflow user:reset-password budi
+
+# Docker Compose
+docker compose exec app /cashflow user:reset-password budi
+
+# Lokal
+go run . user:reset-password budi
+```
+
+Tanpa terminal (mis. dari skrip), kata sandi dibaca dari baris pertama stdin:
+`echo "$PASSWORD_BARU" | cashflow user:reset-password budi`. Aturannya sama dengan
+pendaftaran: 8–72 karakter.
 
 ## Catatan
 

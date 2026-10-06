@@ -42,6 +42,9 @@ func init() {
 
 func main() {
 	loadDotenv(".env") // local-dev convenience; Docker uses compose env_file
+	if len(os.Args) > 1 {
+		os.Exit(runCommand(os.Args[1:])) // admin commands, see cli.go
+	}
 
 	dsn := env("DATABASE_URL", "postgres://cashflow:cashflow@localhost:5432/cashflow?sslmode=disable")
 	port := env("PORT", "8080")

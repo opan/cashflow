@@ -115,6 +115,7 @@ change amount/type or delete an entry will be rejected by the database.
 
 ```
 main.go            Configuration, DB connection, routing, middleware
+cli.go             Admin commands (user:reset-password)
 handlers.go        HTTP handlers + template rendering
 auth.go            Password hashing (bcrypt), cookie sessions, user middleware
 store.go           Data access layer (users, sessions, cashplans, entries)
@@ -141,6 +142,27 @@ entry_revisions(id, entry_id, party, description, occurred_at, revised_at)
 
 `party` = payer (income) / payee (expense). `description` = notes (income) /
 reason-description (expense).
+
+## Admin: reset a password
+
+There is no forgot-password flow; an admin can set a new password from the command line.
+The command uses the same `DATABASE_URL` as the server, asks for the new password twice
+(hidden), and logs the user out of all their sessions.
+
+```bash
+# Kubernetes (the pod already has DATABASE_URL)
+kubectl -n app exec -it deploy/cashflow -- /cashflow user:reset-password budi
+
+# Docker Compose
+docker compose exec app /cashflow user:reset-password budi
+
+# Local
+go run . user:reset-password budi
+```
+
+Without a terminal (e.g. from a script), the password is read from the first line of stdin:
+`echo "$NEW_PASSWORD" | cashflow user:reset-password budi`. Same rules as registration:
+8–72 characters.
 
 ## Notes
 

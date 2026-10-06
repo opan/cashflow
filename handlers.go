@@ -38,6 +38,7 @@ const (
 	maxTitleLen    = 200
 	maxDescLen     = 1000
 	maxPartyLen    = 200
+	minPasswordLen = 8
 	maxPasswordLen = 72 // bcrypt hashes at most 72 bytes
 )
 
@@ -332,7 +333,7 @@ func (a *App) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
-	case len(pw) < 8:
+	case len(pw) < minPasswordLen:
 		a.render(w, r, "register", authVM{Err: "Kata sandi minimal 8 karakter.", Username: username})
 		return
 	case len(pw) > maxPasswordLen:

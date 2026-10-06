@@ -138,6 +138,28 @@ func (s *Store) CreateSession(ctx context.Context, token, userID string, expires
 	return err
 }
 
+// ResetPassword sets a user's password hash and deletes all their sessions in
+// one transaction, so anyone still logged in with the old password is logged
+// out. pgx.ErrNoRows if there is no such user.
+func (s *Store) ResetPassword(ctx context.Context, username, hash string) (int64, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(ctx)
+	var id string
+	if err := tx.QueryRow(ctx,
+		`UPDATE users SET password_hash = $2 WHERE username = $1 RETURNING id`, username, hash,
+	).Scan(&id); err != nil {
+		return 0, err
+	}
+	ct, err := tx.Exec(ctx, `DELETE FROM sessions WHERE user_id = $1`, id)
+	if err != nil {
+		return 0, err
+	}
+	return ct.RowsAffected(), tx.Commit(ctx)
+}
+
 func (s *Store) DeleteSession(ctx context.Context, token string) error {
 	_, err := s.pool.Exec(ctx, `DELETE FROM sessions WHERE id = $1`, token)
 	return err

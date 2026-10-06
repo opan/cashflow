@@ -11,6 +11,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.46.0
 	go.opentelemetry.io/otel/sdk/metric v1.46.0
 	golang.org/x/crypto v0.56.0
+	golang.org/x/term v0.45.0
 )
 
 require (
