@@ -107,10 +107,9 @@ With `AUTH_PROVIDER=aio`:
 - The local password forms are no longer used: `POST /login` and `POST /register` redirect into
   the aio flow.
 
-> ⚠️ **Don't turn on `AUTH_PROVIDER=aio` on an instance that already has users.** Existing
-> cashflow accounts can't be linked to aio accounts yet (waiting on the migration, RFC-001 §7.3):
-> their passwords stop working, and logging in through aio creates a new, empty account (or is
-> refused when the username is the same). Only enable it on a fresh instance for now.
+> ⚠️ **Already have users? Move their accounts to aio first** before turning on
+> `AUTH_PROVIDER=aio` (see [Moving existing users](#moving-existing-users-to-all-in-one)). Without
+> that, old passwords stop working and logging in through aio creates a new, empty account.
 
 ### Login flow
 
@@ -166,7 +165,7 @@ If aio can't be reached at logout time, cashflow still logs the user out of cash
   letters, digits, `_`, 3–30 characters).
   - Already used by another aio account (e.g. a renamed one): an `_xxxxxxxx` suffix is added.
   - Already used by an **existing (local) cashflow account**: the login is refused. Existing
-    accounts are never taken over automatically.
+    accounts are never taken over automatically; move them first with `users:import` (below).
 
 ### Setup
 
@@ -188,6 +187,113 @@ If aio can't be reached at logout time, cashflow still logs the user out of cash
 For local development, run aio and cashflow on different hosts, e.g. aio on
 `http://127.0.0.1:18080` and cashflow on `http://localhost:8090` (aio accepts `http` redirect URIs
 only for loopback addresses), with `AIO_REDIRECT_URL=http://localhost:8090/auth/callback`.
+
+### Moving existing users to All-in-one
+
+The `all-in-one users:import` command copies cashflow's local accounts (username + bcrypt password
+hash, as-is) into aio, then links them in cashflow (`users.aio_user_id`). As a result:
+
+- **Passwords stay the same.** Users log in on aio's page with the username and password they
+  already use. Nobody re-registers or resets a password.
+- **Data doesn't move.** Cashplans, entries and dues stay in cashflow's database; `users` rows keep
+  their ids and only gain a link to the aio account.
+- **Current sessions keep working** until they expire (30 days); after that, users log in through
+  aio.
+
+The command reads cashflow's database directly (cashflow and aio usually share one Postgres
+server) from the `CASHFLOW_DATABASE_URL` environment variable rather than a flag, so the database
+password stays out of the process list. Without `--apply` it only prints the plan.
+
+1. **Deploy the cashflow version with All-in-one login, keeping `AUTH_PROVIDER=local`.** On start,
+   cashflow adds the `aio_user_id` column; users notice nothing.
+2. **Register cashflow in aio** (step 2 of [Setup](#setup)) and prepare the `AIO_*` variables, but
+   don't change `AUTH_PROVIDER` yet.
+3. **Dry run**, with aio's configuration (see the Kubernetes Job example below):
+
+   ```bash
+   export CASHFLOW_DATABASE_URL='postgres://cashflow:...@<pg-server>:5432/cashflow?sslmode=disable'
+   all-in-one users:import
+   ```
+
+   ```
+   USERNAME  RESULT           AIO ACCOUNT                           NOTE
+   budi      created          59d879b8-8c96-43dc-91c9-9a14dcef7fbe
+   siti      skipped          -                                     aio already has this username for another account: ...
+   admin     skipped          -                                     reserved in aio (aio's bootstrap admin, ...): rename it in cashflow first
+   opan      skipped          -                                     aio already has this username for another account: ...
+   ```
+
+4. **Resolve the skipped accounts.** `--apply` writes nothing while any account is skipped.
+
+   | Cause | What to do |
+   | --- | --- |
+   | Username already in aio, **same person** (e.g. your own account) | Add `--link-existing <name>`. The cashflow account is linked to that aio account; it logs in with its **aio password**. |
+   | Username already in aio, **someone else** | Rename it in cashflow: `UPDATE users SET username = 'siti_kas' WHERE username = 'siti';` and tell the user their new username. |
+   | aio's bootstrap admin name (`rbac.admin_username`, e.g. `admin`) | Rename it in cashflow (aio grants the admin group to this name when it has no admin), or `--link-existing` if it really is your aio admin account. |
+   | aio's shared demo account (`demo_mode.username`) | Rename it in cashflow; the demo account can't log in to other apps. |
+   | Invalid username or hash | Fix the data in cashflow. |
+
+5. **Run it for real:** `all-in-one users:import --apply` (plus `--link-existing ...` if needed).
+   The aio accounts are created in one transaction, then the links are written in cashflow in one
+   transaction. Re-running is safe: accounts already moved are recognised and only linked.
+
+   ```
+   Imported into aio: 3 new, 0 already there, 1 linked to existing accounts. Linked in cashflow: 4.
+   Every cashflow account is linked: cashflow can switch to AUTH_PROVIDER=aio.
+   ```
+
+6. **Switch to `AUTH_PROVIDER=aio`** and restart cashflow.
+
+**Going back to local login** (if needed): set `AUTH_PROVIDER=local` again. Cashflow still keeps the
+local password hashes, so everyone can log in as before (password changes made in aio after the
+switch don't carry back). The aio accounts do no harm and can stay.
+
+<details>
+<summary>Kubernetes Job example (aio's image is distroless, so <code>kubectl exec</code> won't do)</summary>
+
+The Job uses the same image, configuration and secrets as aio's deployment, and takes
+`CASHFLOW_DATABASE_URL` from cashflow's secret. Run it without `--apply` first, read the log
+(`kubectl -n app logs job/all-in-one-users-import`), delete the Job, then run it again with
+`--apply`.
+
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: all-in-one-users-import
+  namespace: app
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: users-import
+          image: opanmustopah/all-in-one:latest
+          args: ["users:import"]   # then: ["users:import", "--apply", "--link-existing", "opan"]
+          env:
+            - name: CASHFLOW_DATABASE_URL
+              valueFrom: { secretKeyRef: { name: cashflow-secrets, key: DATABASE_URL } }
+            - name: ALLINONE_AUTH_JWT_SECRET
+              valueFrom: { secretKeyRef: { name: all-in-one-secrets, key: jwt-secret } }
+            - name: ALLINONE_AUTH_TOTP_ENCRYPTION_KEY
+              valueFrom: { secretKeyRef: { name: all-in-one-secrets, key: totp_encryption_secret } }
+            - { name: ALLINONE_STORAGE_TYPE, value: "postgres" }
+            - { name: ALLINONE_STORAGE_POSTGRES_HOST, value: "192.168.68.124" }
+            - { name: ALLINONE_STORAGE_POSTGRES_PORT, value: "5432" }
+            - { name: ALLINONE_STORAGE_POSTGRES_USER, value: "allinone" }
+            - { name: ALLINONE_STORAGE_POSTGRES_DBNAME, value: "allinone" }
+            - { name: ALLINONE_STORAGE_POSTGRES_SSLMODE, value: "disable" }
+            - name: ALLINONE_STORAGE_POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: all-in-one-secrets, key: postgres_password } }
+          volumeMounts:
+            - { name: config, mountPath: /app/config, readOnly: true }
+      volumes:
+        - name: config
+          configMap: { name: all-in-one-config }
+```
+
+</details>
 
 ### All-in-one login configuration
 
@@ -220,7 +326,7 @@ silently falling back to local login).
 | Proses masuk dibatalkan atau ditolak (login cancelled or refused) | aio sent an error back to cashflow (e.g. the callback link was opened in a browser that didn't finish the login) | Log in again from cashflow in the same browser |
 | Gagal menyelesaikan proses masuk (couldn't finish logging in) | The code exchange failed (e.g. wrong `AIO_CLIENT_SECRET`, or the code expired) | Check the configuration and cashflow's log |
 | Gagal memverifikasi identitas (couldn't verify identity) | The ID token was rejected (issuer, audience, signature or nonce) | Make sure `AIO_ISSUER` and `AIO_CLIENT_ID` are right |
-| Nama pengguna ini sudah dipakai akun cashflow lama (username taken by an existing account) | The aio username matches a local cashflow account | Wait for account linking (RFC-001 §7.3) |
+| Nama pengguna ini sudah dipakai akun cashflow lama (username taken by an existing account) | The aio username matches a local cashflow account that isn't linked yet | Move the existing accounts with `users:import` (with `--link-existing` if it's the same person) |
 | (on aio's page) `redirect_uri` or *unknown client* error | `AIO_REDIRECT_URL` or `AIO_CLIENT_ID` doesn't match the registration in aio | Match `--id` and `--redirect-uri`; check `all-in-one oidc:client:list` |
 
 Errors that happen on aio's pages (e.g. the shared demo account being refused, or a login link

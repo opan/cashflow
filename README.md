@@ -103,10 +103,9 @@ Dengan `AUTH_PROVIDER=aio`:
 - Formulir kata sandi lokal tidak dipakai lagi: `POST /login` dan `POST /register` dialihkan
   ke alur aio.
 
-> ⚠️ **Jangan aktifkan `AUTH_PROVIDER=aio` pada instance yang sudah punya pengguna.** Akun
-> cashflow lama belum bisa ditautkan ke akun aio (menunggu migrasi, RFC-001 §7.3): kata
-> sandinya tidak berlaku lagi, dan masuk lewat aio membuat akun baru yang kosong (atau
-> ditolak jika nama penggunanya sama). Aktifkan hanya pada instance baru untuk sekarang.
+> ⚠️ **Sudah punya pengguna? Pindahkan dulu akun mereka ke aio** sebelum mengaktifkan
+> `AUTH_PROVIDER=aio` (lihat [Memindahkan pengguna lama](#memindahkan-pengguna-lama-ke-all-in-one)).
+> Tanpa itu, kata sandi lama tidak berlaku lagi dan masuk lewat aio membuat akun baru yang kosong.
 
 ### Alur masuk
 
@@ -163,7 +162,7 @@ cashflow saja.
   kecil, angka, `_`, 3–30 karakter).
   - Sudah dipakai akun aio lain (mis. akun yang berganti nama): ditambah akhiran `_xxxxxxxx`.
   - Sudah dipakai **akun cashflow lama** (lokal): masuk ditolak. Akun lama tidak pernah diambil
-    alih otomatis.
+    alih otomatis; pindahkan dulu dengan `users:import` (di bawah).
 
 ### Pemasangan
 
@@ -185,6 +184,113 @@ cashflow saja.
 Untuk pengembangan lokal, jalankan aio dan cashflow di host berbeda, mis. aio di
 `http://127.0.0.1:18080` dan cashflow di `http://localhost:8090` (aio menerima redirect URI
 `http` hanya untuk alamat loopback), dengan `AIO_REDIRECT_URL=http://localhost:8090/auth/callback`.
+
+### Memindahkan pengguna lama ke All-in-one
+
+Perintah `all-in-one users:import` menyalin akun lokal cashflow (nama pengguna + hash kata sandi
+bcrypt apa adanya) ke aio, lalu menautkannya di cashflow (`users.aio_user_id`). Hasilnya:
+
+- **Kata sandi tetap sama.** Pengguna masuk di halaman aio dengan nama pengguna dan kata sandi
+  yang sudah mereka pakai. Tidak ada yang perlu mendaftar ulang atau mengganti kata sandi.
+- **Data tidak berpindah.** Cashplan, transaksi, dan iuran tetap di database cashflow; baris
+  `users` tidak berubah id-nya, hanya ditambah tautan ke akun aio.
+- **Sesi yang berjalan tetap berlaku** sampai kedaluwarsa (30 hari); setelah itu pengguna masuk
+  lewat aio.
+
+Perintah ini membaca database cashflow langsung (cashflow dan aio biasanya di server Postgres
+yang sama) dari variabel lingkungan `CASHFLOW_DATABASE_URL`, bukan dari flag, agar kata sandi
+database tidak muncul di daftar proses. Tanpa `--apply` perintah ini hanya menampilkan rencana.
+
+1. **Deploy versi cashflow dengan login All-in-one, tetap `AUTH_PROVIDER=local`.** Saat start,
+   cashflow menambah kolom `aio_user_id`; pengguna tidak merasakan perubahan apa pun.
+2. **Daftarkan cashflow di aio** (langkah 2 di [Pemasangan](#pemasangan)) dan siapkan variabel
+   `AIO_*`, tetapi jangan ubah `AUTH_PROVIDER` dulu.
+3. **Uji coba (dry run)** dengan konfigurasi aio (lihat contoh Job Kubernetes di bawah):
+
+   ```bash
+   export CASHFLOW_DATABASE_URL='postgres://cashflow:...@<server-pg>:5432/cashflow?sslmode=disable'
+   all-in-one users:import
+   ```
+
+   ```
+   USERNAME  RESULT           AIO ACCOUNT                           NOTE
+   budi      created          59d879b8-8c96-43dc-91c9-9a14dcef7fbe
+   siti      skipped          -                                     aio already has this username for another account: ...
+   admin     skipped          -                                     reserved in aio (aio's bootstrap admin, ...): rename it in cashflow first
+   opan      skipped          -                                     aio already has this username for another account: ...
+   ```
+
+4. **Selesaikan akun yang di-*skip*.** `--apply` tidak menulis apa pun selama masih ada yang di-skip.
+
+   | Penyebab | Tindakan |
+   | --- | --- |
+   | Nama pengguna sudah ada di aio, **orang yang sama** (mis. akun Anda sendiri) | Tambahkan `--link-existing <nama>`. Akun cashflow ditautkan ke akun aio itu; ia masuk dengan **kata sandi aio-nya**. |
+   | Nama pengguna sudah ada di aio, **orang lain** | Ganti nama di cashflow: `UPDATE users SET username = 'siti_kas' WHERE username = 'siti';` lalu beri tahu penggunanya nama barunya. |
+   | Nama admin awal aio (`rbac.admin_username`, mis. `admin`) | Ganti nama di cashflow (aio memberi grup admin ke nama ini jika belum ada admin), atau `--link-existing` jika itu memang akun admin Anda di aio. |
+   | Akun demo bersama aio (`demo_mode.username`) | Ganti nama di cashflow; akun demo tidak bisa dipakai untuk masuk ke aplikasi lain. |
+   | Nama pengguna atau hash tidak valid | Perbaiki datanya di cashflow. |
+
+5. **Jalankan sungguhan:** `all-in-one users:import --apply` (ditambah `--link-existing ...` bila
+   perlu). Akun aio dibuat dalam satu transaksi, lalu tautannya ditulis di cashflow dalam satu
+   transaksi. Menjalankan ulang aman: akun yang sudah dipindah dikenali dan hanya ditautkan.
+
+   ```
+   Imported into aio: 3 new, 0 already there, 1 linked to existing accounts. Linked in cashflow: 4.
+   Every cashflow account is linked: cashflow can switch to AUTH_PROVIDER=aio.
+   ```
+
+6. **Ubah ke `AUTH_PROVIDER=aio`** dan jalankan ulang cashflow.
+
+**Kembali ke login lokal** (jika perlu): set `AUTH_PROVIDER=local` lagi. Hash kata sandi lokal
+masih disimpan cashflow, jadi semua orang bisa masuk seperti sebelumnya (perubahan kata sandi yang
+dibuat di aio setelah peralihan tidak ikut). Akun di aio tidak mengganggu dan bisa dibiarkan.
+
+<details>
+<summary>Contoh Job Kubernetes (aio memakai image distroless, jadi tidak bisa lewat <code>kubectl exec</code>)</summary>
+
+Job ini memakai image, konfigurasi, dan secret aio yang sama dengan deployment-nya, dan mengambil
+`CASHFLOW_DATABASE_URL` dari secret cashflow. Jalankan dulu tanpa `--apply`, baca lognya
+(`kubectl -n app logs job/all-in-one-users-import`), hapus Job-nya, lalu jalankan lagi dengan
+`--apply`.
+
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: all-in-one-users-import
+  namespace: app
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: users-import
+          image: opanmustopah/all-in-one:latest
+          args: ["users:import"]   # then: ["users:import", "--apply", "--link-existing", "opan"]
+          env:
+            - name: CASHFLOW_DATABASE_URL
+              valueFrom: { secretKeyRef: { name: cashflow-secrets, key: DATABASE_URL } }
+            - name: ALLINONE_AUTH_JWT_SECRET
+              valueFrom: { secretKeyRef: { name: all-in-one-secrets, key: jwt-secret } }
+            - name: ALLINONE_AUTH_TOTP_ENCRYPTION_KEY
+              valueFrom: { secretKeyRef: { name: all-in-one-secrets, key: totp_encryption_secret } }
+            - { name: ALLINONE_STORAGE_TYPE, value: "postgres" }
+            - { name: ALLINONE_STORAGE_POSTGRES_HOST, value: "192.168.68.124" }
+            - { name: ALLINONE_STORAGE_POSTGRES_PORT, value: "5432" }
+            - { name: ALLINONE_STORAGE_POSTGRES_USER, value: "allinone" }
+            - { name: ALLINONE_STORAGE_POSTGRES_DBNAME, value: "allinone" }
+            - { name: ALLINONE_STORAGE_POSTGRES_SSLMODE, value: "disable" }
+            - name: ALLINONE_STORAGE_POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: all-in-one-secrets, key: postgres_password } }
+          volumeMounts:
+            - { name: config, mountPath: /app/config, readOnly: true }
+      volumes:
+        - name: config
+          configMap: { name: all-in-one-config }
+```
+
+</details>
 
 ### Konfigurasi login All-in-one
 
@@ -217,7 +323,7 @@ diam-diam kembali ke login lokal).
 | Proses masuk dibatalkan atau ditolak | aio mengirim galat kembali ke cashflow (mis. tautan callback dibuka di browser yang tidak menyelesaikan login) | Masuk lagi dari cashflow di browser yang sama |
 | Gagal menyelesaikan proses masuk | Penukaran kode gagal (mis. `AIO_CLIENT_SECRET` salah, atau kode sudah kedaluwarsa) | Periksa konfigurasi, cek log cashflow |
 | Gagal memverifikasi identitas | ID token ditolak (issuer, audience, tanda tangan, atau nonce) | Pastikan `AIO_ISSUER` dan `AIO_CLIENT_ID` benar |
-| Nama pengguna ini sudah dipakai akun cashflow lama | Nama pengguna aio sama dengan akun lokal cashflow | Tunggu fitur penautan akun (RFC-001 §7.3) |
+| Nama pengguna ini sudah dipakai akun cashflow lama | Nama pengguna aio sama dengan akun lokal cashflow yang belum ditautkan | Pindahkan akun lama dengan `users:import` (pakai `--link-existing` jika orangnya sama) |
 | (di halaman aio) galat `redirect_uri` atau *unknown client* | `AIO_REDIRECT_URL` atau `AIO_CLIENT_ID` tidak cocok dengan pendaftaran di aio | Samakan dengan `--id` dan `--redirect-uri`; cek `all-in-one oidc:client:list` |
 
 Galat yang terjadi di halaman aio (mis. akun demo bersama ditolak, atau tautan login dibuka di

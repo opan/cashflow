@@ -223,7 +223,17 @@ after a restart not reaching aio, first-login race, over-long suffixed
 usernames, `?next` dropped for logged-in users, discovery lock held during the
 network call.
 
+**Existing users (2026-10-10):** production already has users, so they are
+moved with aio's `all-in-one users:import` before switching: it reads
+cashflow's `users` table directly (same Postgres server), copies username +
+bcrypt hash into aio as-is (passwords keep working), and sets
+`users.aio_user_id`. Dry run by default; `--apply` writes nothing while any
+account needs a decision (username already in aio → `--link-existing` or
+rename in cashflow; aio's bootstrap admin and demo names are protected).
+Runbook: README → "Memindahkan pengguna lama ke All-in-one". `password_hash`
+is kept for now, so `AUTH_PROVIDER=local` still works as a rollback.
+
 **Open before enabling on a real instance:**
-- Existing users can't be linked yet → only fresh instances (aio
-  `users:import`, RFC-001 §7.3).
+- Run the import (dry run, resolve, `--apply`), then switch.
 - aio must run as a single replica (login requests live in its memory).
+- Later: drop `users.password_hash` once the rollback window is over.
