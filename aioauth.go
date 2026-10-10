@@ -244,11 +244,23 @@ func (a *App) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	a.setLoginStateCookie(w, r, st.encode(), int(oidcStateTTL.Seconds()))
 
-	opts := []oauth2.AuthCodeOption{oauth2.S256ChallengeOption(st.Verifier), oidc.Nonce(st.Nonce)}
-	if r.URL.Query().Get("signup") == "1" {
+	opts := authCodeOptions(st, r.URL.Query().Get("signup") == "1")
+	http.Redirect(w, r, a.aio.oauth.AuthCodeURL(st.State, opts...), http.StatusFound)
+}
+
+// authCodeOptions are the authorize parameters besides state: PKCE, nonce,
+// ui_locales=id so aio's login pages speak cashflow's language, and
+// prompt=create for "Daftar".
+func authCodeOptions(st loginState, signup bool) []oauth2.AuthCodeOption {
+	opts := []oauth2.AuthCodeOption{
+		oauth2.S256ChallengeOption(st.Verifier),
+		oidc.Nonce(st.Nonce),
+		oauth2.SetAuthURLParam("ui_locales", "id"),
+	}
+	if signup {
 		opts = append(opts, oauth2.SetAuthURLParam("prompt", "create"))
 	}
-	http.Redirect(w, r, a.aio.oauth.AuthCodeURL(st.State, opts...), http.StatusFound)
+	return opts
 }
 
 // handleAuthCallback finishes a login: checks state, exchanges the code with

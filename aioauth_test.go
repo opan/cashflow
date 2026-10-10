@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"golang.org/x/oauth2"
 )
 
 func TestLocalUsername(t *testing.T) {
@@ -172,5 +174,26 @@ func TestSecurityHeaders_FormActionAllowsAioOnlyWhenEnabled(t *testing.T) {
 	got := csp(&AioAuth{enabled: true, issuer: "https://auth.example.com"})
 	if !strings.Contains(got, "form-action 'self' https://auth.example.com;") {
 		t.Errorf("aio login must allow the logout redirect to aio, got %q", got)
+	}
+}
+
+func TestAuthCodeOptions(t *testing.T) {
+	st := loginState{State: "s", Nonce: "the-nonce", Verifier: oauth2.GenerateVerifier()}
+	cfg := oauth2.Config{ClientID: "cashflow", Endpoint: oauth2.Endpoint{AuthURL: "https://aio.example/authorize"}}
+	for _, signup := range []bool{false, true} {
+		u, err := url.Parse(cfg.AuthCodeURL(st.State, authCodeOptions(st, signup)...))
+		if err != nil {
+			t.Fatal(err)
+		}
+		q := u.Query()
+		if q.Get("ui_locales") != "id" {
+			t.Errorf("ui_locales = %q, want id (aio's pages in Indonesian)", q.Get("ui_locales"))
+		}
+		if q.Get("code_challenge_method") != "S256" || q.Get("code_challenge") == "" || q.Get("nonce") != "the-nonce" {
+			t.Errorf("missing PKCE or nonce: %s", u)
+		}
+		if got := q.Get("prompt") == "create"; got != signup {
+			t.Errorf("signup=%v: prompt=%q", signup, q.Get("prompt"))
+		}
 	}
 }
