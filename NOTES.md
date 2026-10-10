@@ -193,3 +193,47 @@ browser [done: upload is server-side]; store only the link [done].
 - **Edit plan** title/description (entries stay locked/append-only).
 - **"Terbilang"** hint under the amount field (spell out the number).
 - Report/plan **currency** always IDR integer (no decimals) — keep.
+
+---
+
+## E. Feature: Log in through all-in-one (OpenID Connect)
+
+**Goal:** one account for cashflow and aio's other apps; cashflow stops handling
+passwords. Design: aio's RFC-001 (Option A, OIDC) and ADR
+(`docs/adr/OIDC_PROVIDER_ADR.md` in opan/all-in-one). **BUILT 2026-10 behind
+`AUTH_PROVIDER=aio`** (default `local` = unchanged). User-facing docs:
+README → "Masuk lewat All-in-one" / README.en → "Logging in through All-in-one".
+
+**Decisions:**
+- Authorization code + PKCE + nonce via `coreos/go-oidc` + `x/oauth2`; state,
+  nonce and verifier in a 10-minute `cashflow_oidc` cookie (`aioauth.go`).
+- Local user linked by the ID token's `sub` (`users.aio_user_id`), created on
+  first login with no password. A username held by a local-only account is
+  never taken over (409 page); one held by another aio account gets a suffix.
+- Fails closed (aio down = nobody new logs in); existing sessions keep working.
+  Discovery is lazy so cashflow starts without aio.
+- Logout ends both sessions: cashflow redirects to aio's `end_session` with the
+  ID token kept in `sessions.id_token`. CSP `form-action` lists aio's origin.
+- aio's login pages are presented as Cashflow: brand colour + icon registered
+  on the aio client (`--brand-color '#0f766e' --icon 💰`), Indonesian through
+  `ui_locales=id`.
+
+**Review fixes (2026-10-05):** open redirect via `?next=/\t/evil.com`, logout
+after a restart not reaching aio, first-login race, over-long suffixed
+usernames, `?next` dropped for logged-in users, discovery lock held during the
+network call.
+
+**Existing users (2026-10-10):** production already has users, so they are
+moved with aio's `all-in-one users:import` before switching: it reads
+cashflow's `users` table directly (same Postgres server), copies username +
+bcrypt hash into aio as-is (passwords keep working), and sets
+`users.aio_user_id`. Dry run by default; `--apply` writes nothing while any
+account needs a decision (username already in aio → `--link-existing` or
+rename in cashflow; aio's bootstrap admin and demo names are protected).
+Runbook: README → "Memindahkan pengguna lama ke All-in-one". `password_hash`
+is kept for now, so `AUTH_PROVIDER=local` still works as a rollback.
+
+**Open before enabling on a real instance:**
+- Run the import (dry run, resolve, `--apply`), then switch.
+- aio must run as a single replica (login requests live in its memory).
+- Later: drop `users.password_hash` once the rollback window is over.
