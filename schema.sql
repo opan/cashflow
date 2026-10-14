@@ -126,3 +126,12 @@ DROP TRIGGER IF EXISTS entries_guard ON entries;
 CREATE TRIGGER entries_guard
     BEFORE UPDATE OR DELETE ON entries
     FOR EACH ROW EXECUTE FUNCTION entries_guard();
+
+-- Login through all-in-one (OpenID Connect, AUTH_PROVIDER=aio): a local user
+-- is linked to its aio account by the ID token's subject, and has no local
+-- password. Local accounts (AUTH_PROVIDER=local) keep theirs.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS aio_user_id text;
+CREATE UNIQUE INDEX IF NOT EXISTS users_aio_user_id ON users (aio_user_id) WHERE aio_user_id IS NOT NULL;
+ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+-- The ID token from login, sent back to aio as id_token_hint on logout.
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS id_token text;

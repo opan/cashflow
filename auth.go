@@ -66,10 +66,12 @@ func currentUser(r *http.Request) *User {
 	return u
 }
 
-func (a *App) startSession(w http.ResponseWriter, r *http.Request, userID string) error {
+// startSession logs a user in. idToken is the aio ID token when the login came
+// through aio (stored for the logout hint), empty for local logins.
+func (a *App) startSession(w http.ResponseWriter, r *http.Request, userID, idToken string) error {
 	token := newToken() + newToken() // 32 random bytes of entropy
 	expires := time.Now().Add(sessionTTL)
-	if err := a.store.CreateSession(r.Context(), token, userID, expires); err != nil {
+	if err := a.store.CreateSession(r.Context(), token, userID, expires, idToken); err != nil {
 		return err
 	}
 	http.SetCookie(w, &http.Cookie{

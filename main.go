@@ -82,7 +82,17 @@ func main() {
 		log.Print("external rate limiting: disabled (set AIO_RATELIMIT_ENABLED/URL/TOKEN to enable)")
 	}
 
-	app := &App{store: &Store{pool: pool}, tmpl: buildTemplates(), nc: nc, rl: rl, guard: newSubmitGuard(24 * time.Hour), assetVer: assetVersion("static/style.css", "static/app.js")}
+	aio, err := NewAioAuthFromEnv()
+	if err != nil {
+		log.Fatalf("auth config: %v", err)
+	}
+	if aio.Enabled() {
+		log.Printf("login: through all-in-one (%s)", aio.issuer)
+	} else {
+		log.Print("login: local username/password (set AUTH_PROVIDER=aio to log in through all-in-one)")
+	}
+
+	app := &App{store: &Store{pool: pool}, tmpl: buildTemplates(), nc: nc, rl: rl, aio: aio, guard: newSubmitGuard(24 * time.Hour), assetVer: assetVersion("static/style.css", "static/app.js")}
 	if otelOn {
 		registerBusinessMetrics(app.store)
 	}
@@ -104,6 +114,8 @@ func main() {
 	mux.HandleFunc("GET /login", app.handleLoginForm)
 	mux.HandleFunc("POST /login", app.handleLogin)
 	mux.HandleFunc("POST /logout", app.handleLogout)
+	mux.HandleFunc("GET /auth/login", app.handleAuthLogin)
+	mux.HandleFunc("GET /auth/callback", app.handleAuthCallback)
 	// Cashplans (owner)
 	mux.HandleFunc("POST /cashplans", app.handleCreate)
 	mux.HandleFunc("GET /kelola/{slug}", app.handleManage)
@@ -129,7 +141,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              ":" + port,
-		Handler:           logRequests(securityHeaders(app.withUser(otelMiddleware(mux)))),
+		Handler:           logRequests(securityHeaders(aio.origin(), app.withUser(otelMiddleware(mux)))),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       60 * time.Second,  // generous: allows a slow ~5 MB receipt upload
 		WriteTimeout:      120 * time.Second, // generous: allows the Nextcloud round-trip
@@ -156,9 +168,17 @@ func main() {
 // securityHeaders sets conservative, app-wide response headers. The CSP is
 // strict (default-src 'self'); it works because all CSS/JS is same-origin and
 // there are no inline scripts/handlers. The favicon is a data: URI (img-src).
-func securityHeaders(next http.Handler) http.Handler {
-	const csp = "default-src 'self'; img-src 'self' data:; base-uri 'none'; " +
-		"form-action 'self'; frame-ancestors 'none'"
+// formActionExtra is an additional origin forms may submit to. Logout posts
+// to /logout, which redirects to all-in-one's end_session; browsers apply
+// form-action to that redirect too, so with AUTH_PROVIDER=aio the aio origin
+// must be listed or logout silently stops at cashflow.
+func securityHeaders(formActionExtra string, next http.Handler) http.Handler {
+	formAction := "form-action 'self'"
+	if formActionExtra != "" {
+		formAction += " " + formActionExtra
+	}
+	csp := "default-src 'self'; img-src 'self' data:; base-uri 'none'; " +
+		formAction + "; frame-ancestors 'none'"
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
 		h.Set("Content-Security-Policy", csp)

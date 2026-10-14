@@ -28,6 +28,7 @@ type App struct {
 	tmpl     map[string]*template.Template
 	nc       *Nextcloud   // nil when uploads are not configured
 	rl       *RateLimiter // external rate limiting via all-in-one; no-op when disabled
+	aio      *AioAuth     // login through all-in-one (AUTH_PROVIDER=aio); nil-safe when disabled
 	guard    *submitGuard // one-time form tokens; makes entry submission idempotent
 	assetVer string       // content hash appended to static asset URLs for cache-busting
 }
@@ -65,7 +66,7 @@ func buildTemplates() map[string]*template.Template {
 	pages := map[string]*template.Template{}
 	// Each page gets its own template set (layout + partials + that page) so
 	// their "content"/"title" blocks don't collide.
-	for _, name := range []string{"landing", "login", "register", "dashboard", "manage", "planedit", "view", "laporan", "edit", "versions", "iuran", "panduan", "masukan", "fitur_iuran", "notfound"} {
+	for _, name := range []string{"landing", "login", "register", "autherror", "dashboard", "manage", "planedit", "view", "laporan", "edit", "versions", "iuran", "panduan", "masukan", "fitur_iuran", "notfound"} {
 		t := template.New(name).Funcs(funcs)
 		t = template.Must(t.ParseFS(tmplFS,
 			"templates/layout.html",
@@ -318,10 +319,19 @@ func (a *App) handleRegisterForm(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
+	if a.aio.Enabled() {
+		http.Redirect(w, r, "/auth/login?signup=1", http.StatusSeeOther)
+		return
+	}
 	a.render(w, r, "register", authVM{})
 }
 
 func (a *App) handleRegister(w http.ResponseWriter, r *http.Request) {
+	if a.aio.Enabled() {
+		// Passwords live in all-in-one; local credentials are not accepted.
+		http.Redirect(w, r, "/auth/login", http.StatusSeeOther)
+		return
+	}
 	limitBody(w, r, maxFormBytes)
 	username := normalizeUsername(r.FormValue("username"))
 	pw := r.FormValue("password")
@@ -360,7 +370,7 @@ func (a *App) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	recordUserCreated(r.Context())
-	if err := a.startSession(w, r, u.ID); err != nil {
+	if err := a.startSession(w, r, u.ID, ""); err != nil {
 		log.Printf("start session: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -370,13 +380,26 @@ func (a *App) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) handleLoginForm(w http.ResponseWriter, r *http.Request) {
 	if currentUser(r) != nil {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		http.Redirect(w, r, nextOrHome(r.URL.Query().Get("next")), http.StatusSeeOther)
+		return
+	}
+	if a.aio.Enabled() {
+		target := "/auth/login"
+		if next := safeNext(r.URL.Query().Get("next")); next != "" {
+			target += "?next=" + url.QueryEscape(next)
+		}
+		http.Redirect(w, r, target, http.StatusSeeOther)
 		return
 	}
 	a.render(w, r, "login", authVM{})
 }
 
 func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if a.aio.Enabled() {
+		// Passwords live in all-in-one; local credentials are not accepted.
+		http.Redirect(w, r, "/auth/login", http.StatusSeeOther)
+		return
+	}
 	limitBody(w, r, maxFormBytes)
 	username := normalizeUsername(r.FormValue("username"))
 	pw := r.FormValue("password")
@@ -391,7 +414,7 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	if err := a.startSession(w, r, u.ID); err != nil {
+	if err := a.startSession(w, r, u.ID, ""); err != nil {
 		log.Printf("start session: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -401,7 +424,30 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) handleLogout(w http.ResponseWriter, r *http.Request) {
 	limitBody(w, r, maxFormBytes)
+	// For a session started through all-in-one, also end the aio session:
+	// read its ID token before the local session (and the token) are deleted.
+	var aioLogout string
+	if a.aio.Enabled() {
+		if c, err := r.Cookie(sessionCookie); err == nil {
+			if idToken, err := a.store.SessionIDToken(r.Context(), c.Value); err == nil && idToken != "" {
+				// After a restart nothing has run discovery yet; without it the
+				// logout would end only cashflow's session and single sign-on
+				// would log the user straight back in. If aio is down, fall back
+				// to logging out of cashflow only.
+				ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+				if err := a.aio.discover(ctx); err != nil {
+					log.Printf("aio logout: %v", err)
+				}
+				cancel()
+				aioLogout = a.aio.logoutURL(idToken)
+			}
+		}
+	}
 	a.endSession(w, r)
+	if aioLogout != "" {
+		http.Redirect(w, r, aioLogout, http.StatusSeeOther)
+		return
+	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
@@ -956,7 +1002,11 @@ func (a *App) renderEntryDetail(w http.ResponseWriter, r *http.Request, plan *Ca
 func (a *App) requireUser(w http.ResponseWriter, r *http.Request) *User {
 	u := currentUser(r)
 	if u == nil {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		target := "/login"
+		if r.Method == http.MethodGet {
+			target += "?next=" + url.QueryEscape(r.URL.RequestURI())
+		}
+		http.Redirect(w, r, target, http.StatusSeeOther)
 		return nil
 	}
 	return u

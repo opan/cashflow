@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -123,7 +124,7 @@ func (s *Store) UserByUsername(ctx context.Context, username string) (*User, str
 	u := &User{}
 	var hash string
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, username, password_hash, created_at FROM users WHERE username = $1`, username,
+		`SELECT id, username, COALESCE(password_hash, ''), created_at FROM users WHERE username = $1`, username,
 	).Scan(&u.ID, &u.Username, &hash, &u.CreatedAt)
 	if err != nil {
 		return nil, "", err
@@ -131,11 +132,64 @@ func (s *Store) UserByUsername(ctx context.Context, username string) (*User, str
 	return u, hash, nil
 }
 
-func (s *Store) CreateSession(ctx context.Context, token, userID string, expires time.Time) error {
+// CreateSession stores a session. idToken is the aio ID token for sessions
+// started through aio (kept for the logout hint), empty for local logins.
+func (s *Store) CreateSession(ctx context.Context, token, userID string, expires time.Time, idToken string) error {
 	_, err := s.pool.Exec(ctx,
-		`INSERT INTO sessions (id, user_id, expires_at) VALUES ($1, $2, $3)`,
-		token, userID, expires)
+		`INSERT INTO sessions (id, user_id, expires_at, id_token) VALUES ($1, $2, $3, NULLIF($4, ''))`,
+		token, userID, expires, idToken)
 	return err
+}
+
+// SessionIDToken returns the aio ID token stored with a session ("" if none).
+func (s *Store) SessionIDToken(ctx context.Context, token string) (string, error) {
+	var idToken string
+	err := s.pool.QueryRow(ctx,
+		`SELECT COALESCE(id_token, '') FROM sessions WHERE id = $1`, token).Scan(&idToken)
+	return idToken, err
+}
+
+// --- Login through all-in-one (OIDC) ---
+
+// UserByAioID returns the local user linked to an aio account; pgx.ErrNoRows
+// if none is linked yet.
+func (s *Store) UserByAioID(ctx context.Context, aioID string) (*User, error) {
+	u := &User{}
+	err := s.pool.QueryRow(ctx,
+		`SELECT id, username, created_at FROM users WHERE aio_user_id = $1`, aioID,
+	).Scan(&u.ID, &u.Username, &u.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return u, nil
+}
+
+// CreateAioUser creates a local user linked to an aio account. It has no
+// local password. ErrUsernameTaken if the username is in use.
+func (s *Store) CreateAioUser(ctx context.Context, aioID, username string) (*User, error) {
+	u := &User{Username: username}
+	err := s.pool.QueryRow(ctx,
+		`INSERT INTO users (username, aio_user_id) VALUES ($1, $2) RETURNING id, created_at`,
+		username, aioID,
+	).Scan(&u.ID, &u.CreatedAt)
+	if isUniqueViolation(err) {
+		return nil, ErrUsernameTaken
+	}
+	if err != nil {
+		return nil, err
+	}
+	return u, nil
+}
+
+// UsernameOwner reports whether a username exists and, if so, which aio
+// account it is linked to ("" for a local-only account).
+func (s *Store) UsernameOwner(ctx context.Context, username string) (exists bool, aioID string, err error) {
+	err = s.pool.QueryRow(ctx,
+		`SELECT COALESCE(aio_user_id, '') FROM users WHERE username = $1`, username).Scan(&aioID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, "", nil
+	}
+	return err == nil, aioID, err
 }
 
 func (s *Store) DeleteSession(ctx context.Context, token string) error {
