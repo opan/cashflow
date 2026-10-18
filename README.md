@@ -86,6 +86,8 @@ Variabel lain (unggah lampiran ke Nextcloud, rate limiting, metrik OpenTelemetry
 | `GET  /kelola/{slug}`        | pemilik                  | Kelola: tambah transaksi, ringkasan, bagikan |
 | `POST /kelola/{slug}/entry`  | pemilik                  | Tambah transaksi (income/expense)         |
 | `GET  /p/{slug}`             | siapa pun dengan tautan  | Lihat (baca-saja) ringkasan & riwayat     |
+| `GET  /admin`                | admin aio                | Admin (baca-saja): aktivitas semua pengguna, tanpa nominal |
+| `GET  /admin/users/{id}`     | admin aio                | Admin (baca-saja): cashplan dan saldo satu pengguna |
 
 ## Masuk lewat All-in-one (opsional)
 
@@ -302,6 +304,7 @@ spec:
 | `AIO_CLIENT_SECRET`   | (dari `oidc:client:create`)                  | Rahasia; simpan di secret, bukan di repo |
 | `AIO_REDIRECT_URL`    | `https://cashflow.example.com/auth/callback` | Harus sama persis dengan `--redirect-uri` |
 | `AIO_POST_LOGOUT_URL` | `https://cashflow.example.com/`              | Opsional; tujuan setelah keluar dari aio (harus terdaftar) |
+| `AIO_INTERNAL_URL`    | `http://all-in-one.app.svc.cluster.local`    | Opsional; alamat aio untuk cek status admin (server ke server). Kosong = `AIO_ISSUER` |
 
 Dengan `AUTH_PROVIDER=aio`, konfigurasi yang kurang lengkap membuat cashflow gagal start (bukan
 diam-diam kembali ke login lokal).
@@ -328,6 +331,22 @@ diam-diam kembali ke login lokal).
 
 Galat yang terjadi di halaman aio (mis. akun demo bersama ditolak, atau tautan login dibuka di
 browser lain) ditampilkan oleh aio sendiri, dalam bahasa Indonesia, dengan tombol **Kembali**.
+
+### Halaman admin
+
+Hanya dengan `AUTH_PROVIDER=aio`. Siapa yang admin ditentukan oleh All-in-one (grup `admin`), bukan
+oleh cashflow (RFC-002 di all-in-one):
+
+- Pada **setiap** permintaan ke `/admin`, cashflow bertanya ke aio (`GET /api/v1/oidc/users/{sub}/status`,
+  dengan `AIO_CLIENT_ID` dan `AIO_CLIENT_SECRET`), tanpa cache. Admin yang dicabut atau diblokir di aio
+  langsung kehilangan akses pada permintaan berikutnya.
+- Bukan admin, akun lokal, atau pengguna tak dikenal: **404**. Jika aio tidak bisa dihubungi: **503**
+  (gagal tertutup); halaman lain tetap jalan.
+- Tautan **Admin** di menu memakai status saat login dan hanya untuk tampilan; halamannya selalu bertanya lagi.
+- **Baca-saja.** `/admin` menampilkan aktivitas tiap pengguna (jumlah cashplan, transaksi, aktivitas
+  terakhir) tanpa nominal; nominal rupiah hanya tampil di halaman satu pengguna.
+- Setiap tampilan dicatat di tabel `admin_views` (admin, halaman, data pengguna siapa).
+- Di cluster, set `AIO_INTERNAL_URL` ke alamat Service aio agar cek ini tidak lewat jaringan publik.
 
 ## Model akses (design decision)
 

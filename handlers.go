@@ -66,7 +66,7 @@ func buildTemplates() map[string]*template.Template {
 	pages := map[string]*template.Template{}
 	// Each page gets its own template set (layout + partials + that page) so
 	// their "content"/"title" blocks don't collide.
-	for _, name := range []string{"landing", "login", "register", "autherror", "dashboard", "manage", "planedit", "view", "laporan", "edit", "versions", "iuran", "panduan", "masukan", "fitur_iuran", "notfound"} {
+	for _, name := range []string{"landing", "login", "register", "autherror", "dashboard", "manage", "planedit", "view", "laporan", "edit", "versions", "iuran", "panduan", "masukan", "fitur_iuran", "notfound", "admin", "adminuser", "adminerror"} {
 		t := template.New(name).Funcs(funcs)
 		t = template.Must(t.ParseFS(tmplFS,
 			"templates/layout.html",
@@ -81,6 +81,7 @@ func buildTemplates() map[string]*template.Template {
 // pageData wraps every page's view model with cross-cutting state (login).
 type pageData struct {
 	Username string
+	IsAdmin  bool // show the admin link (a hint; admin pages check with aio)
 	AssetVer string
 	Data     any
 }
@@ -98,6 +99,7 @@ func (a *App) renderStatus(w http.ResponseWriter, r *http.Request, name string, 
 	pd := pageData{Data: data, AssetVer: a.assetVer}
 	if u := currentUser(r); u != nil {
 		pd.Username = u.Username
+		pd.IsAdmin = u.AdminHint && a.aio.Enabled()
 	}
 	// Render into a buffer first so a template error becomes a clean 500
 	// instead of a half-written response.
@@ -370,7 +372,7 @@ func (a *App) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	recordUserCreated(r.Context())
-	if err := a.startSession(w, r, u.ID, ""); err != nil {
+	if err := a.startSession(w, r, u.ID, "", false); err != nil {
 		log.Printf("start session: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -414,7 +416,7 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	if err := a.startSession(w, r, u.ID, ""); err != nil {
+	if err := a.startSession(w, r, u.ID, "", false); err != nil {
 		log.Printf("start session: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return

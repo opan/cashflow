@@ -1,0 +1,33 @@
+{{define "title"}}{{.Data.User.Username}} &mdash; Admin &mdash; Cashflow{{end}}
+{{define "content"}}
+<p class="small"><a href="/admin">&larr; Semua pengguna</a></p>
+<div class="planhead">
+  <h1>{{.Data.User.Username}}</h1>
+  <p class="muted">Terdaftar {{tgl .Data.User.CreatedAt}}{{if not .Data.User.AioUserID}} &middot; akun lokal{{end}} &middot; hanya-baca</p>
+</div>
+
+{{if .Data.Plans}}
+<section class="card">
+  <div class="tablewrap">
+    <table class="datatable">
+      <thead>
+        <tr><th>Cashplan</th><th class="num">Transaksi</th><th class="num">Pemasukan</th><th class="num">Pengeluaran</th><th class="num">Saldo</th></tr>
+      </thead>
+      <tbody>
+        {{range .Data.Plans}}
+        <tr>
+          <td><a href="/p/{{.Plan.Slug}}">{{.Plan.Title}}</a><br><span class="muted small">/p/{{.Plan.Slug}} &middot; dibuat {{tgl .Plan.CreatedAt}}</span></td>
+          <td class="num">{{.Summary.EntryCount}}</td>
+          <td class="num income">{{rupiah .Summary.TotalIncome}}</td>
+          <td class="num expense">{{rupiah .Summary.TotalExpense}}</td>
+          <td class="num">{{rupiah .Summary.Balance}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</section>
+{{else}}
+<p class="muted empty">Pengguna ini belum punya cashplan.</p>
+{{end}}
+{{end}}

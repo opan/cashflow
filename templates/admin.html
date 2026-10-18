@@ -1,0 +1,30 @@
+{{define "title"}}Admin &mdash; Cashflow{{end}}
+{{define "content"}}
+<h1>Admin: pengguna</h1>
+<p class="muted">Hanya-baca. Ringkasan aktivitas tanpa nominal; buka pengguna untuk melihat cashplan dan saldonya. Setiap tampilan dicatat.</p>
+
+{{if .Data.Users}}
+<section class="card">
+  <div class="tablewrap">
+    <table class="datatable">
+      <thead>
+        <tr><th>Pengguna</th><th>Terdaftar</th><th class="num">Cashplan</th><th class="num">Transaksi</th><th>Aktivitas terakhir</th></tr>
+      </thead>
+      <tbody>
+        {{range .Data.Users}}
+        <tr>
+          <td><a href="/admin/users/{{.User.ID}}">{{.User.Username}}</a>{{if not .User.AioUserID}} <span class="muted small">(akun lokal)</span>{{end}}</td>
+          <td>{{tgl .User.CreatedAt}}</td>
+          <td class="num">{{.PlanCount}}</td>
+          <td class="num">{{.EntryCount}}</td>
+          <td>{{if .LastActivity}}{{tgl .LastActivity}}{{else}}<span class="muted">&mdash;</span>{{end}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</section>
+{{else}}
+<p class="muted empty">Belum ada pengguna.</p>
+{{end}}
+{{end}}

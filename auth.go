@@ -67,11 +67,12 @@ func currentUser(r *http.Request) *User {
 }
 
 // startSession logs a user in. idToken is the aio ID token when the login came
-// through aio (stored for the logout hint), empty for local logins.
-func (a *App) startSession(w http.ResponseWriter, r *http.Request, userID, idToken string) error {
+// through aio (stored for the logout hint), empty for local logins. adminHint
+// only decides whether the nav shows the admin link; admin pages ask aio again.
+func (a *App) startSession(w http.ResponseWriter, r *http.Request, userID, idToken string, adminHint bool) error {
 	token := newToken() + newToken() // 32 random bytes of entropy
 	expires := time.Now().Add(sessionTTL)
-	if err := a.store.CreateSession(r.Context(), token, userID, expires, idToken); err != nil {
+	if err := a.store.CreateSession(r.Context(), token, userID, expires, idToken, adminHint); err != nil {
 		return err
 	}
 	http.SetCookie(w, &http.Cookie{
