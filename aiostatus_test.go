@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -57,22 +58,36 @@ func TestUserStatus(t *testing.T) {
 	}
 }
 
-func TestUserStatus_EscapesSubAndTimesOut(t *testing.T) {
-	block := make(chan struct{})
-	var gotPath string
+func TestUserStatus_NonUUIDSubNeverReachesAio(t *testing.T) {
+	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.EscapedPath()
-		<-block
+		calls.Add(1)
 	}))
 	defer srv.Close()
-	defer close(block)
+
+	a := &AioAuth{enabled: true, internalURL: srv.URL, httpClient: &http.Client{Timeout: time.Second}}
+	for _, sub := range []string{"../../clients", "budi", "", "6f1c2a0e-8f4b-4f51-9a39-0d6f3d1e2b7a/../x"} {
+		got, err := a.userStatus(context.Background(), sub)
+		if err != nil || got.Admin {
+			t.Errorf("sub %q: status = %+v, err = %v; want not admin, no error", sub, got, err)
+		}
+	}
+	if n := calls.Load(); n != 0 {
+		t.Errorf("aio was called %d times for non-UUID subs", n)
+	}
+}
+
+func TestUserStatus_TimesOut(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-release
+	}))
+	defer srv.Close()
+	defer close(release)
 
 	a := &AioAuth{enabled: true, internalURL: srv.URL, httpClient: &http.Client{Timeout: 50 * time.Millisecond}}
-	if _, err := a.userStatus(context.Background(), "../../clients"); err == nil {
+	if _, err := a.userStatus(context.Background(), "6f1c2a0e-8f4b-4f51-9a39-0d6f3d1e2b7a"); err == nil {
 		t.Fatal("expected a timeout error")
-	}
-	if !strings.HasPrefix(gotPath, "/api/v1/oidc/users/..%2F..%2Fclients/status") {
-		t.Errorf("sub not escaped: %q", gotPath)
 	}
 }
 

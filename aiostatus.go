@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/url"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 const aioStatusTimeout = 2 * time.Second
@@ -25,13 +26,21 @@ type aioUserStatus struct {
 // know is simply not an admin; anything else unexpected is an error, which
 // callers treat as "not admin".
 func (a *AioAuth) userStatus(ctx context.Context, sub string) (aioUserStatus, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		a.internalURL+"/api/v1/oidc/users/"+url.PathEscape(sub)+"/status", nil)
+	// aio user ids are UUIDs. Anything else can't be an aio admin, and only a
+	// parsed id ever reaches the URL, so the request can't be steered to
+	// another host or path. The host is operator config (AIO_INTERNAL_URL or
+	// AIO_ISSUER).
+	id, err := uuid.Parse(sub)
+	if err != nil {
+		return aioUserStatus{}, nil
+	}
+	endpoint := a.internalURL + "/api/v1/oidc/users/" + id.String() + "/status"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil) // #nosec G704 -- host from config, path segment is a parsed UUID
 	if err != nil {
 		return aioUserStatus{}, err
 	}
 	req.SetBasicAuth(a.clientID, a.clientSecret)
-	resp, err := a.httpClient.Do(req)
+	resp, err := a.httpClient.Do(req) // #nosec G704 -- see endpoint above
 	if err != nil {
 		return aioUserStatus{}, fmt.Errorf("aio status: %w", err)
 	}
