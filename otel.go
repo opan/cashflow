@@ -24,6 +24,7 @@ var (
 	activeReqs     metric.Int64UpDownCounter
 	entriesCreated metric.Int64Counter
 	usersCreated   metric.Int64Counter
+	adminChecks    metric.Int64Counter
 )
 
 // initOTel wires up OTLP metric export (push) to the collector. Endpoint,
@@ -85,6 +86,13 @@ func initOTel(ctx context.Context) (shutdown func(context.Context) error, enable
 	if err != nil {
 		log.Printf("otel users counter: %v", err)
 	}
+	adminChecks, err = meter.Int64Counter(
+		"cashflow.admin.checks",
+		metric.WithDescription("Admin page requests by the result of asking all-in-one."),
+	)
+	if err != nil {
+		log.Printf("otel admin counter: %v", err)
+	}
 
 	// Go runtime metrics (memory, goroutines, GC).
 	if err := runtime.Start(runtime.WithMinimumReadMemStatsInterval(time.Second)); err != nil {
@@ -139,6 +147,16 @@ func recordUserCreated(ctx context.Context) {
 		return
 	}
 	usersCreated.Add(ctx, 1)
+}
+
+// recordAdminCheck counts admin page requests by outcome: "admin",
+// "not_admin", "local_account" or "error" (aio unreachable or unexpected
+// answer). No-op when telemetry is disabled.
+func recordAdminCheck(ctx context.Context, result string) {
+	if adminChecks == nil {
+		return
+	}
+	adminChecks.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result)))
 }
 
 // registerBusinessMetrics adds gauges for total users, cashplans and entries,

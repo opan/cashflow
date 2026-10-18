@@ -90,6 +90,8 @@ Other variables (Nextcloud attachment uploads, rate limiting, OpenTelemetry metr
 | `GET  /kelola/{slug}`        | owner                    | Manage: add transactions, summary, share    |
 | `POST /kelola/{slug}/entry`  | owner                    | Add transaction (income/expense)            |
 | `GET  /p/{slug}`             | anyone with the link     | View (read-only) summary & history          |
+| `GET  /admin`                | aio admin                | Admin (read-only): every user's activity, no amounts |
+| `GET  /admin/users/{id}`     | aio admin                | Admin (read-only): one user's cashplans and balances |
 
 ## Logging in through All-in-one (optional)
 
@@ -305,6 +307,7 @@ spec:
 | `AIO_CLIENT_SECRET`   | (from `oidc:client:create`)                  | Secret; keep it in a secret store, not in the repo |
 | `AIO_REDIRECT_URL`    | `https://cashflow.example.com/auth/callback` | Must match `--redirect-uri` exactly |
 | `AIO_POST_LOGOUT_URL` | `https://cashflow.example.com/`              | Optional; where aio returns after logout (must be registered) |
+| `AIO_INTERNAL_URL`    | `http://all-in-one.app.svc.cluster.local`    | Optional; aio address for the admin status check (server to server). Empty = `AIO_ISSUER` |
 
 With `AUTH_PROVIDER=aio`, an incomplete configuration stops cashflow from starting (rather than
 silently falling back to local login).
@@ -331,6 +334,22 @@ silently falling back to local login).
 
 Errors that happen on aio's pages (e.g. the shared demo account being refused, or a login link
 opened in another browser) are shown by aio itself, in Indonesian, with a **Kembali** (back) button.
+
+### Admin pages
+
+Only with `AUTH_PROVIDER=aio`. All-in-one decides who is an admin (its `admin` group), not cashflow
+(RFC-002 in all-in-one):
+
+- On **every** request to `/admin`, cashflow asks aio (`GET /api/v1/oidc/users/{sub}/status`, with
+  `AIO_CLIENT_ID` and `AIO_CLIENT_SECRET`), with no cache. An admin who is removed or blocked in aio loses
+  access on their next request.
+- Not an admin, a local account, or an unknown user: **404**. If aio can't be reached: **503** (fails
+  closed); the rest of cashflow keeps working.
+- The **Admin** link in the menu uses the status at login and is display-only; the pages always ask again.
+- **Read-only.** `/admin` shows each user's activity (cashplans, entries, last activity) without amounts;
+  rupiah figures appear only on one user's page.
+- Every view is recorded in the `admin_views` table (admin, page, whose data).
+- In the cluster, set `AIO_INTERNAL_URL` to aio's Service address so this check stays off the public network.
 
 ## Access model (design decision)
 

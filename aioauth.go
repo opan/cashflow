@@ -32,6 +32,10 @@ type AioAuth struct {
 	clientSecret  string
 	redirectURL   string
 	postLogoutURL string
+	// internalURL is where server-to-server calls (the admin status check) go:
+	// the cluster address when set, otherwise the public issuer.
+	internalURL string
+	httpClient  *http.Client
 
 	mu            sync.Mutex
 	oauth         oauth2.Config
@@ -61,6 +65,11 @@ func NewAioAuthFromEnv() (*AioAuth, error) {
 		clientSecret:  strings.TrimSpace(env("AIO_CLIENT_SECRET", "")),
 		redirectURL:   strings.TrimSpace(env("AIO_REDIRECT_URL", "")),
 		postLogoutURL: strings.TrimSpace(env("AIO_POST_LOGOUT_URL", "")),
+		internalURL:   strings.TrimRight(strings.TrimSpace(env("AIO_INTERNAL_URL", "")), "/"),
+		httpClient:    &http.Client{Timeout: aioStatusTimeout},
+	}
+	if a.internalURL == "" {
+		a.internalURL = a.issuer
 	}
 	var missing []string
 	for k, v := range map[string]string{"AIO_ISSUER": a.issuer, "AIO_CLIENT_ID": a.clientID,
@@ -324,7 +333,7 @@ func (a *App) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "gagal masuk", http.StatusInternalServerError)
 		return
 	}
-	if err := a.startSession(w, r, u.ID, rawID); err != nil {
+	if err := a.startSession(w, r, u.ID, rawID, a.aio.adminHint(ctx, idt.Subject)); err != nil {
 		log.Printf("aio login: start session: %v", err)
 		http.Error(w, "gagal masuk", http.StatusInternalServerError)
 		return
