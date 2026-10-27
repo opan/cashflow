@@ -42,6 +42,18 @@ type AioAuth struct {
 	verifier      *oidc.IDTokenVerifier
 	endSessionURL string
 	ready         bool
+
+	links *AioLinks
+}
+
+// AioLinks point to aio's own pages for forgetting and changing a password or
+// email (RFC-003 §6.7). The forms stay on aio, so passwords are only ever
+// typed there; client_id brands the pages as cashflow and return_to (checked
+// by aio against the registered URIs) brings users back.
+type AioLinks struct {
+	Host       string // aio's address, named before users leave (RFC-003 §6.8)
+	ForgotURL  string
+	AccountURL string
 }
 
 const (
@@ -81,10 +93,42 @@ func NewAioAuthFromEnv() (*AioAuth, error) {
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("AUTH_PROVIDER=aio requires %s", strings.Join(missing, ", "))
 	}
+	a.links = newAioLinks(a.issuer, a.clientID, a.redirectURL)
 	return a, nil
 }
 
+// newAioLinks builds the links once at startup. return_to is cashflow's own
+// origin, taken from the redirect URL that aio already has registered.
+func newAioLinks(issuer, clientID, redirectURL string) *AioLinks {
+	iu, err := url.Parse(issuer)
+	if err != nil || iu.Host == "" {
+		return nil
+	}
+	ru, err := url.Parse(redirectURL)
+	if err != nil || ru.Host == "" {
+		return nil
+	}
+	self := ru.Scheme + "://" + ru.Host
+	link := func(page, returnTo string) string {
+		q := url.Values{"client_id": {clientID}, "return_to": {self + returnTo}, "ui_locales": {"id"}}
+		return issuer + page + "?" + q.Encode()
+	}
+	return &AioLinks{
+		Host:       iu.Host,
+		ForgotURL:  link("/forgot-password", "/login"),
+		AccountURL: link("/account", "/akun"),
+	}
+}
+
 func (a *AioAuth) Enabled() bool { return a != nil && a.enabled }
+
+// Links returns the account page links, nil when aio is disabled.
+func (a *AioAuth) Links() *AioLinks {
+	if !a.Enabled() {
+		return nil
+	}
+	return a.links
+}
 
 // origin is aio's scheme://host[:port] ("" when disabled), for the CSP.
 func (a *AioAuth) origin() string {
