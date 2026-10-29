@@ -1,0 +1,14 @@
+{{define "title"}}Akun &mdash; Cashflow{{end}}
+{{define "content"}}
+<section class="card authcard">
+  <h1>Akun</h1>
+  <p>Anda masuk sebagai <strong>{{.Username}}</strong>.</p>
+  <p>Akun Cashflow Anda dikelola oleh <strong>All-in-one</strong>, jadi kata sandi dan email diubah di sana,
+     bukan di Cashflow.</p>
+  <p class="muted">Tambahkan email agar Anda bisa mengatur ulang kata sandi sendiri jika lupa.</p>
+  <div class="cta">
+    <a class="btn primary" href="{{.Aio.AccountURL}}">Ubah kata sandi &amp; email</a>
+  </div>
+  {{template "aioleaving" .}}
+</section>
+{{end}}

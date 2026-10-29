@@ -86,6 +86,7 @@ Other variables (Nextcloud attachment uploads, rate limiting, OpenTelemetry metr
 | `GET  /auth/login`           | public                   | Start a login at All-in-one (`?next=`, `?signup=1`) |
 | `GET  /auth/callback`        | public                   | Back from All-in-one: exchange the code, start a session |
 | `POST /logout`               | logged in                | Log out (with `AUTH_PROVIDER=aio`: also logs out of All-in-one) |
+| `GET  /akun`                 | logged in                | Account: links to the password & email page in All-in-one (only with `AUTH_PROVIDER=aio`) |
 | `POST /cashplans`            | logged in                | Create cashplan (title, slug, description)  |
 | `GET  /kelola/{slug}`        | owner                    | Manage: add transactions, summary, share    |
 | `POST /kelola/{slug}/entry`  | owner                    | Add transaction (income/expense)            |
@@ -106,6 +107,10 @@ With `AUTH_PROVIDER=aio`:
   diamankan oleh All-in-one" (login secured by All-in-one) note. Cashflow never sees passwords.
 - Users who are already logged in to aio get straight in, with no form (*single sign-on*).
 - **Keluar** (log out) in cashflow also ends the aio session.
+- **Lupa kata sandi?** (forgot password) on the home page and the **Akun** (account) menu
+  (`/akun`, button **Ubah kata sandi & email**) open aio's pages for resetting or changing the
+  password and email, presented as Cashflow (aio RFC-003). Before users leave, cashflow names aio's
+  address (from `AIO_ISSUER`) so they know where their password belongs.
 - The local password forms are no longer used: `POST /login` and `POST /register` redirect into
   the aio flow.
 

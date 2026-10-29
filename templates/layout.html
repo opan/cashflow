@@ -16,6 +16,7 @@
         {{if .Username}}
           {{if .IsAdmin}}<a href="/admin">Admin</a>{{end}}
           <span class="who" title="{{.Username}}">{{.Username}}</span>
+          {{if .Aio}}<a href="/akun">Akun</a>{{end}}
           <form method="post" action="/logout" class="inline"><button class="linkbtn" type="submit">Keluar</button></form>
         {{else}}
           <a href="/login">Masuk</a>

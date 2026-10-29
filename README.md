@@ -82,6 +82,7 @@ Variabel lain (unggah lampiran ke Nextcloud, rate limiting, metrik OpenTelemetry
 | `GET  /auth/login`           | publik                   | Mulai login di All-in-one (`?next=`, `?signup=1`) |
 | `GET  /auth/callback`        | publik                   | Kembali dari All-in-one: tukar kode, buat sesi |
 | `POST /logout`               | login                    | Keluar (dengan `AUTH_PROVIDER=aio`: juga keluar dari All-in-one) |
+| `GET  /akun`                 | login                    | Akun: tautan ke halaman kata sandi & email di All-in-one (hanya dengan `AUTH_PROVIDER=aio`) |
 | `POST /cashplans`            | login                    | Buat cashplan (title, slug, description)  |
 | `GET  /kelola/{slug}`        | pemilik                  | Kelola: tambah transaksi, ringkasan, bagikan |
 | `POST /kelola/{slug}/entry`  | pemilik                  | Tambah transaksi (income/expense)         |
@@ -102,6 +103,10 @@ Dengan `AUTH_PROVIDER=aio`:
   All-in-one". Cashflow tidak pernah melihat kata sandi pengguna.
 - Pengguna yang sudah login di aio langsung masuk tanpa formulir (*single sign-on*).
 - **Keluar** dari cashflow juga mengakhiri sesi aio.
+- **Lupa kata sandi?** di beranda dan menu **Akun** (`/akun`, tombol **Ubah kata sandi & email**)
+  membuka halaman aio untuk mengatur ulang atau mengganti kata sandi dan email, tampil sebagai
+  Cashflow (aio RFC-003). Sebelum pergi, cashflow menyebut alamat aio (diambil dari `AIO_ISSUER`)
+  supaya pengguna tahu di mana kata sandi boleh diketik.
 - Formulir kata sandi lokal tidak dipakai lagi: `POST /login` dan `POST /register` dialihkan
   ke alur aio.
 

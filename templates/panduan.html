@@ -12,8 +12,24 @@
 <div class="guide">
   <div class="gstep">
     <h3><span class="n">1</span> Daftar atau Masuk</h3>
+    {{if .Aio}}
+    <p>Buat akun dengan <strong>nama pengguna</strong> dan kata sandi (minimal 5 karakter). Nama pengguna
+       bersifat <em>siapa cepat dia dapat</em>. Sudah punya akun? Cukup <a href="/login">Masuk</a>.</p>
+    <p>Akun Cashflow dikelola oleh <strong>All-in-one</strong>, layanan akun yang juga dipakai aplikasi lain.
+       Karena itu halaman Daftar, Masuk, dan pengaturan akun ada di <strong>{{.Aio.Host}}</strong>, bukan di
+       alamat Cashflow. Masukkan kata sandi hanya di alamat itu.</p>
+    <p><strong>Tambahkan email.</strong> Email boleh dikosongkan saat mendaftar, tetapi tanpa email Anda tidak bisa
+       mengatur ulang kata sandi sendiri. Tambahkan lewat menu <strong>Akun</strong> &rarr;
+       <strong>Ubah kata sandi &amp; email</strong>, lalu klik tautan konfirmasi yang dikirim ke email itu.
+       Di menu yang sama Anda juga bisa mengganti kata sandi.</p>
+    <p><strong>Lupa kata sandi?</strong> Klik <a href="{{.Aio.ForgotURL}}">Lupa kata sandi?</a> di beranda.
+       Jika email Anda sudah dikonfirmasi, kata sandi sementara dikirim ke sana (berlaku 30 menit). Masuk dengan
+       kata sandi itu, lalu buat kata sandi baru. Kata sandi lama tetap bisa dipakai sampai saat itu.
+       Belum punya email? Halaman itu menjelaskan cara meminta bantuan admin.</p>
+    {{else}}
     <p>Buat akun dengan <strong>nama pengguna</strong> dan kata sandi (minimal 8 karakter). Nama pengguna
        bersifat <em>siapa cepat dia dapat</em>. Sudah punya akun? Cukup <a href="/login">Masuk</a>.</p>
+    {{end}}
     <p class="muted">Akun hanya diperlukan untuk membuat dan mengelola cashplan. Untuk sekadar melihat
        sebuah cashplan, Anda cukup memakai tautannya tanpa akun.</p>
   </div>

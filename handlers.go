@@ -66,7 +66,7 @@ func buildTemplates() map[string]*template.Template {
 	pages := map[string]*template.Template{}
 	// Each page gets its own template set (layout + partials + that page) so
 	// their "content"/"title" blocks don't collide.
-	for _, name := range []string{"landing", "login", "register", "autherror", "dashboard", "manage", "planedit", "view", "laporan", "edit", "versions", "iuran", "panduan", "masukan", "fitur_iuran", "notfound", "admin", "adminuser", "adminerror"} {
+	for _, name := range []string{"landing", "login", "register", "autherror", "dashboard", "manage", "planedit", "view", "laporan", "edit", "versions", "iuran", "panduan", "masukan", "fitur_iuran", "notfound", "admin", "adminuser", "adminerror", "akun"} {
 		t := template.New(name).Funcs(funcs)
 		t = template.Must(t.ParseFS(tmplFS,
 			"templates/layout.html",
@@ -81,7 +81,8 @@ func buildTemplates() map[string]*template.Template {
 // pageData wraps every page's view model with cross-cutting state (login).
 type pageData struct {
 	Username string
-	IsAdmin  bool // show the admin link (a hint; admin pages check with aio)
+	IsAdmin  bool      // show the admin link (a hint; admin pages check with aio)
+	Aio      *AioLinks // aio's account pages; nil with local login
 	AssetVer string
 	Data     any
 }
@@ -96,7 +97,7 @@ func (a *App) renderStatus(w http.ResponseWriter, r *http.Request, name string, 
 		http.Error(w, "template not found: "+name, http.StatusInternalServerError)
 		return
 	}
-	pd := pageData{Data: data, AssetVer: a.assetVer}
+	pd := pageData{Data: data, Aio: a.aio.Links(), AssetVer: a.assetVer}
 	if u := currentUser(r); u != nil {
 		pd.Username = u.Username
 		pd.IsAdmin = u.AdminHint && a.aio.Enabled()
@@ -122,6 +123,19 @@ func (a *App) notFound(w http.ResponseWriter, r *http.Request) {
 // cross-cutting .Username from pageData.
 func (a *App) handlePanduan(w http.ResponseWriter, r *http.Request) {
 	a.render(w, r, "panduan", nil)
+}
+
+// handleAkun explains that the account lives in all-in-one and links to aio's
+// password and email page. With local login there is nothing to manage.
+func (a *App) handleAkun(w http.ResponseWriter, r *http.Request) {
+	if a.aio.Links() == nil {
+		a.notFound(w, r)
+		return
+	}
+	if a.requireUser(w, r) == nil {
+		return
+	}
+	a.render(w, r, "akun", nil)
 }
 
 func (a *App) handleMasukan(w http.ResponseWriter, r *http.Request) {

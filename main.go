@@ -116,6 +116,7 @@ func main() {
 	mux.HandleFunc("POST /logout", app.handleLogout)
 	mux.HandleFunc("GET /auth/login", app.handleAuthLogin)
 	mux.HandleFunc("GET /auth/callback", app.handleAuthCallback)
+	mux.HandleFunc("GET /akun", app.handleAkun)
 	// Read-only admin pages; aio decides who is an admin on every request.
 	mux.HandleFunc("GET /admin", app.handleAdminUsers)
 	mux.HandleFunc("GET /admin/users/{id}", app.handleAdminUser)

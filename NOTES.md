@@ -237,3 +237,12 @@ is kept for now, so `AUTH_PROVIDER=local` still works as a rollback.
 - Run the import (dry run, resolve, `--apply`), then switch.
 - aio must run as a single replica (login requests live in its memory).
 - Later: drop `users.password_hash` once the rollback window is over.
+
+**Password reset (aio RFC-003, 2026-10-27):** "Lupa kata sandi?" on the landing
+page and `/akun` ("Ubah kata sandi & email") link to aio's `/forgot-password`
+and `/account` with `client_id`, `return_to` (cashflow's origin, from
+`AIO_REDIRECT_URL`) and `ui_locales=id`; aio brands them and checks
+`return_to`. Both say the address is aio's (host from `AIO_ISSUER`) before
+users leave. The guide's step 1 now says 5 characters and explains email and
+reset with aio; the local-login text (8 characters) is unchanged. Needs aio
+with RFC-003 deployed (all-in-one#36).
