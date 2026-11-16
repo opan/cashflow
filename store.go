@@ -63,6 +63,7 @@ type Entry struct {
 	AttachmentURL  string // public Nextcloud share link, or ""
 	AttachmentName string // original filename, for display
 	Edited         bool   // has at least one revision
+	Source         string // name of the link token that added it, or "" if added by hand
 }
 
 func (e Entry) IsIncome() bool      { return e.Type == "income" }
@@ -499,10 +500,11 @@ func (s *Store) EntryByID(ctx context.Context, entryID string) (*Entry, error) {
 	err := s.pool.QueryRow(ctx,
 		`SELECT id, cashplan_id, type, party, description, amount, occurred_at, created_at,
 		        attachment_url, attachment_name,
-		        EXISTS(SELECT 1 FROM entry_revisions r WHERE r.entry_id = entries.id)
+		        EXISTS(SELECT 1 FROM entry_revisions r WHERE r.entry_id = entries.id),
+		        COALESCE((SELECT t.name FROM link_tokens t WHERE t.id = entries.link_token_id), '')
 		 FROM entries WHERE id = $1`, entryID,
 	).Scan(&e.ID, &e.CashplanID, &e.Type, &e.Party, &e.Description, &e.Amount,
-		&e.OccurredAt, &e.CreatedAt, &e.AttachmentURL, &e.AttachmentName, &e.Edited)
+		&e.OccurredAt, &e.CreatedAt, &e.AttachmentURL, &e.AttachmentName, &e.Edited, &e.Source)
 	if err != nil {
 		return nil, err
 	}

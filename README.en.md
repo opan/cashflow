@@ -90,6 +90,8 @@ Other variables (Nextcloud attachment uploads, rate limiting, OpenTelemetry metr
 | `POST /cashplans`            | logged in                | Create cashplan (title, slug, description)  |
 | `GET  /kelola/{slug}`        | owner                    | Manage: add transactions, summary, share    |
 | `POST /kelola/{slug}/entry`  | owner                    | Add transaction (income/expense)            |
+| `GET/POST /kelola/{slug}/integrasi` | owner             | Integrations: create and revoke tokens for other apps |
+| `POST /api/v1/plans/{slug}/entries` | link token        | API: another app adds income (see [Integrations](#integrations-api-for-other-apps)) |
 | `GET  /p/{slug}`             | anyone with the link     | View (read-only) summary & history          |
 | `GET  /admin`                | aio admin                | Admin (read-only): every user's activity, no amounts |
 | `GET  /admin/users/{id}`     | aio admin                | Admin (read-only): one user's cashplans and balances |
@@ -356,6 +358,53 @@ Only with `AUTH_PROVIDER=aio`. All-in-one decides who is an admin (its `admin` g
 - Every view is recorded in the `admin_views` table (admin, page, whose data).
 - In the cluster, set `AIO_INTERNAL_URL` to aio's Service address so this check stays off the public network.
 
+## Integrations (API for other apps)
+
+An owner can let another app add **income** to one cashplan, e.g. tally recording the
+fees for a badminton play day (RFC-004 in tally). In **Kelola → Integrasi** the owner
+creates a token with a name (e.g. `tally`). The token is shown once; the database keeps
+only its SHA-256 hash. A cashplan can have 5 active tokens, and a token can be revoked
+at any time.
+
+A token can only **add income**: it can't read the cashplan, edit an entry or add an
+expense. Its entries follow the same append-only rules, and their detail page names the
+integration that added them.
+
+```http
+POST /api/v1/plans/{slug}/entries
+Authorization: Bearer cfl_...
+Content-Type: application/json
+
+{"key": "tally:42:1", "party": "Mabar Minggu", "amount": 1050000,
+ "date": "2026-11-02", "description": "21 × Rp50.000 (18 tunai, 3 transfer)"}
+```
+
+| Field | Required | Value |
+| --- | --- | --- |
+| `key` | yes | Idempotency key made up by the sender, unique per cashplan; up to 200 ASCII characters, no spaces |
+| `party` | yes | Payer, up to 200 characters |
+| `amount` | yes | Whole rupiah, above 0 |
+| `date` | no | `YYYY-MM-DD`; empty = today (WIB) |
+| `description` | no | Note, up to 1000 characters |
+
+Other fields are rejected. The answer has the same shape as All-in-one's APIs:
+
+```json
+{"success": true, "message": null, "error": null,
+ "data": {"id": "…", "url": "https://…/p/{slug}/entry/…", "amount": 1050000,
+          "date": "2026-11-02", "created": true}}
+```
+
+- **`201`**: a new entry (`created: true`).
+- **`200`**: this `key` was already used with the same amount. Nothing is added, and
+  `data` is the first entry, so the sender can safely retry.
+- **`409 key_conflict`**: the `key` was used with another amount. Amounts never change.
+- **`401 missing_token` / `invalid_token`**: no token, a wrong or revoked one, or one for
+  another cashplan.
+- **`400`** `invalid_json`, `invalid_key`, `invalid_amount`, `invalid_party`,
+  `invalid_description`, `invalid_date`; **`413 too_large`** (over 16 KiB);
+  **`429 rate_limited`** (when All-in-one rate limiting is on, per token).
+
 ## Access model (design decision)
 
 - **Ownership = account.** Every cashplan is owned by the user who created it. To
@@ -382,6 +431,8 @@ Data truthfulness is enforced at the **database** level by the `entries_guard` t
    stays intact and visible to everyone** (an "edited" label + a version timeline on
    each record).
 3. `entry_revisions` itself is append-only (cannot be `UPDATE`d/`DELETE`d).
+4. Entries from the API (integrations) keep the sender's token and `key` forever; both
+   are locked too.
 
 All of these rules apply even from outside the application (e.g. via `psql`) — trying to
 change amount/type or delete an entry will be rejected by the database.
@@ -394,6 +445,7 @@ handlers.go        HTTP handlers + template rendering
 auth.go            Password hashing (bcrypt), cookie sessions, user middleware
 aioauth.go         Login through All-in-one (OpenID Connect): /auth/login, /auth/callback, logout
 store.go           Data access layer (users, sessions, cashplans, entries)
+linkapi.go         Link tokens, the Integrasi page, and the API for other apps
 slug.go            Slug normalization & validation
 money.go           Rupiah parsing & formatting, Indonesian date formatting
 schema.sql         DB schema (applied automatically on start)
@@ -411,8 +463,10 @@ sessions(id, user_id, created_at, expires_at, id_token /* for logging out of aio
 cashplans(id, owner_id, slug, title, description, created_at)
 entries(id, cashplan_id, type['income'|'expense'], party, description,
         amount /* whole rupiah, immutable */, occurred_at, created_at,
-        attachment_url, attachment_name)
+        attachment_url, attachment_name,
+        link_token_id, source_key /* from the API; locked */)
 entry_revisions(id, entry_id, party, description, occurred_at, revised_at)
+link_tokens(id, cashplan_id, name, token_hash /* SHA-256 */, created_at, last_used_at, revoked_at)
 ```
 
 `party` = payer (income) / payee (expense). `description` = notes (income) /
@@ -423,4 +477,7 @@ reason-description (expense).
 - Money amounts are stored as whole-rupiah integers (`bigint`) — no decimals, as is
   customary for IDR — so there are no floating-point rounding errors.
 - Dates default to the `Asia/Jakarta` (WIB) time zone.
+- Tests: `go test -race ./...`. The tests that need a database run only when
+  `CASHFLOW_TEST_DATABASE_URL` is set (an empty database just for tests; the schema is
+  applied automatically).
 - Full reset (delete all data): `docker compose down -v`.

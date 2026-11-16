@@ -99,8 +99,10 @@ BEGIN
     IF NEW.amount IS DISTINCT FROM OLD.amount
        OR NEW.type IS DISTINCT FROM OLD.type
        OR NEW.cashplan_id IS DISTINCT FROM OLD.cashplan_id
-       OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
-        RAISE EXCEPTION 'amount, type, cashplan and created_at are immutable';
+       OR NEW.created_at IS DISTINCT FROM OLD.created_at
+       OR NEW.link_token_id IS DISTINCT FROM OLD.link_token_id
+       OR NEW.source_key IS DISTINCT FROM OLD.source_key THEN
+        RAISE EXCEPTION 'amount, type, cashplan, created_at and source are immutable';
     END IF;
     -- A receipt may be added later (empty -> value), e.g. when a forgotten
     -- receipt is attached via edit. Once set it is locked, so supporting
@@ -148,3 +150,26 @@ CREATE TABLE IF NOT EXISTS admin_views (
     viewed_at       timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS admin_views_admin_idx ON admin_views (admin_id, viewed_at DESC);
+
+-- Link tokens (RFC-004 in tally): a cashplan owner lets another app add
+-- income entries through POST /api/v1/plans/{slug}/entries. Only the SHA-256
+-- of a token is stored; the token itself is shown once when it is created.
+-- A revoked token stays, so entries keep pointing at the app that sent them.
+CREATE TABLE IF NOT EXISTS link_tokens (
+    id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    cashplan_id  uuid        NOT NULL REFERENCES cashplans(id),
+    name         text        NOT NULL,             -- e.g. "tally", shown on the entries it adds
+    token_hash   text        NOT NULL UNIQUE,      -- hex SHA-256 of the token
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    last_used_at timestamptz,
+    revoked_at   timestamptz
+);
+CREATE INDEX IF NOT EXISTS link_tokens_plan_idx ON link_tokens (cashplan_id, created_at DESC);
+
+-- Entries added through the API carry the token that sent them and the
+-- caller's idempotency key, so a retry never adds the same money twice.
+-- Both are immutable (see entries_guard).
+ALTER TABLE entries ADD COLUMN IF NOT EXISTS link_token_id uuid REFERENCES link_tokens(id);
+ALTER TABLE entries ADD COLUMN IF NOT EXISTS source_key    text;
+CREATE UNIQUE INDEX IF NOT EXISTS entries_source_key
+    ON entries (cashplan_id, source_key) WHERE source_key IS NOT NULL;
