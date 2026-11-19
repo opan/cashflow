@@ -134,6 +134,11 @@ func main() {
 	mux.HandleFunc("GET /kelola/{slug}/entry/{id}", app.handleManageEntryDetail)
 	mux.HandleFunc("GET /kelola/{slug}/entry/{id}/edit", app.handleEditEntryForm)
 	mux.HandleFunc("POST /kelola/{slug}/entry/{id}/edit", app.handleEditEntry)
+	mux.HandleFunc("GET /kelola/{slug}/integrasi", app.handleIntegrasi)
+	mux.HandleFunc("POST /kelola/{slug}/integrasi", app.handleCreateLinkToken)
+	mux.HandleFunc("POST /kelola/{slug}/integrasi/{id}/revoke", app.handleRevokeLinkToken)
+	// API for linked apps (link tokens; see linkapi.go)
+	mux.HandleFunc("POST /api/v1/plans/{slug}/entries", app.handleAPIAddEntry)
 	// Public view
 	mux.HandleFunc("GET /p/{slug}", app.handleView)
 	mux.HandleFunc("GET /p/{slug}/laporan", app.handleViewReport)

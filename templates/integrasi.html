@@ -1,0 +1,81 @@
+{{define "title"}}Integrasi &mdash; {{.Data.Plan.Title}}{{end}}
+{{define "content"}}
+<nav class="crumb"><a href="/kelola/{{.Data.Plan.Slug}}">&larr; Kembali</a></nav>
+
+<div class="planhead">
+  <div>
+    <h1>Integrasi</h1>
+    <p class="muted">{{.Data.Plan.Title}}</p>
+  </div>
+  <span class="badge owner">Mode Pemilik</span>
+</div>
+
+{{if .Data.Err}}<div class="alert error">{{.Data.Err}}</div>{{end}}
+
+{{if .Data.NewToken}}
+<section class="card newtoken">
+  <div class="cardhead"><h3>Token untuk {{.Data.NewName}}</h3></div>
+  <p><strong>Salin sekarang.</strong> Token ini hanya ditampilkan sekali. Kalau hilang, cabut lalu buat yang baru.</p>
+  <div class="copyrow">
+    <input type="text" readonly value="{{.Data.NewToken}}" id="newToken" autocomplete="off">
+    <button class="btn" type="button" data-copy="#newToken">Salin</button>
+  </div>
+</section>
+{{end}}
+
+<section class="card">
+  <div class="cardhead"><h3>Aplikasi lain yang boleh mencatat</h3></div>
+  <p class="muted">Dengan token, aplikasi lain (mis. tally untuk iuran main badminton) bisa
+    <strong>menambah pemasukan</strong> ke cashplan ini. Token tidak bisa melihat, mengubah, atau
+    menambah pengeluaran. Transaksi yang dicatatnya tetap tidak bisa dihapus, dan detailnya
+    menyebut nama integrasinya.</p>
+  <form method="post" action="/kelola/{{.Data.Plan.Slug}}/integrasi" class="inlineform">
+    <input type="hidden" name="form_token" value="{{.Data.FormToken}}">
+    <input type="text" name="name" placeholder="Nama, mis. tally" maxlength="60" required>
+    <button class="btn primary" type="submit"{{if ge .Data.Active .Data.Max}} disabled{{end}}>Buat token</button>
+  </form>
+  {{if ge .Data.Active .Data.Max}}<p class="muted small">Sudah ada {{.Data.Max}} token aktif. Cabut salah satu untuk membuat yang baru.</p>{{end}}
+
+  {{if .Data.Tokens}}
+  <ul class="memberlist tokenlist">
+    {{range .Data.Tokens}}
+    <li{{if not .Active}} class="revoked"{{end}}>
+      <span>
+        <strong>{{.Name}}</strong>
+        <span class="muted small">
+          &middot; dibuat {{waktu .CreatedAt}}
+          &middot; {{.Entries}} transaksi
+          {{if .Active}}{{if not .LastUsedAt.IsZero}}&middot; terakhir dipakai {{waktu .LastUsedAt}}{{end}}
+          {{else}}&middot; dicabut {{waktu .RevokedAt}}{{end}}
+        </span>
+      </span>
+      {{if .Active}}
+      <details class="revoke">
+        <summary class="linkbtn danger">Cabut</summary>
+        <form method="post" action="/kelola/{{$.Data.Plan.Slug}}/integrasi/{{.ID}}/revoke" class="inline">
+          <span class="small">{{.Name}} tidak bisa mencatat lagi.</span>
+          <button class="btn tiny expense" type="submit">Ya, cabut</button>
+        </form>
+      </details>
+      {{end}}
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="muted small">Belum ada token.</p>
+  {{end}}
+</section>
+
+<section class="card">
+  <div class="cardhead"><h3>Untuk pengembang</h3></div>
+  <p class="muted small">Kirim <code>POST</code> dengan header <code>Authorization: Bearer &lt;token&gt;</code>:</p>
+  <div class="copyrow">
+    <input type="text" readonly value="{{.Data.Endpoint}}" id="endpoint">
+    <button class="btn" type="button" data-copy="#endpoint">Salin</button>
+  </div>
+  <pre class="apiexample">{"key": "tally:42:1", "party": "Mabar Minggu", "amount": 1050000,
+ "date": "2026-11-02", "description": "21 × Rp50.000"}</pre>
+  <p class="muted small"><code>key</code> dibuat oleh aplikasi pengirim. Kiriman ulang dengan
+    <code>key</code> yang sama tidak menambah transaksi baru. Lihat README untuk jawaban dan kode galatnya.</p>
+</section>
+{{end}}

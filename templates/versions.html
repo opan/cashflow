@@ -10,6 +10,7 @@
       <strong>{{rupiah .Data.Entry.Amount}}</strong>
       <span class="small">(jumlah terkunci)</span>
     </p>
+    {{if .Data.Entry.Source}}<p class="muted small">Dicatat otomatis lewat integrasi <strong>{{.Data.Entry.Source}}</strong>.</p>{{end}}
   </div>
   {{if .Data.Owner}}<a class="btn primary" href="{{.Data.BasePath}}/entry/{{.Data.Entry.ID}}/edit">Ubah</a>{{end}}
 </div>

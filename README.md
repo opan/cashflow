@@ -86,6 +86,8 @@ Variabel lain (unggah lampiran ke Nextcloud, rate limiting, metrik OpenTelemetry
 | `POST /cashplans`            | login                    | Buat cashplan (title, slug, description)  |
 | `GET  /kelola/{slug}`        | pemilik                  | Kelola: tambah transaksi, ringkasan, bagikan |
 | `POST /kelola/{slug}/entry`  | pemilik                  | Tambah transaksi (income/expense)         |
+| `GET/POST /kelola/{slug}/integrasi` | pemilik + admin aio | Integrasi: buat dan cabut token untuk aplikasi lain |
+| `POST /api/v1/plans/{slug}/entries` | token integrasi   | API: aplikasi lain menambah pemasukan (lihat [Integrasi](#integrasi-api-untuk-aplikasi-lain)) |
 | `GET  /p/{slug}`             | siapa pun dengan tautan  | Lihat (baca-saja) ringkasan & riwayat     |
 | `GET  /admin`                | admin aio                | Admin (baca-saja): aktivitas semua pengguna, tanpa nominal |
 | `GET  /admin/users/{id}`     | admin aio                | Admin (baca-saja): cashplan dan saldo satu pengguna |
@@ -353,6 +355,56 @@ oleh cashflow (RFC-002 di all-in-one):
 - Setiap tampilan dicatat di tabel `admin_views` (admin, halaman, data pengguna siapa).
 - Di cluster, set `AIO_INTERNAL_URL` ke alamat Service aio agar cek ini tidak lewat jaringan publik.
 
+## Integrasi (API untuk aplikasi lain)
+
+Pemilik bisa mengizinkan aplikasi lain menambah **pemasukan** ke satu cashplan, mis.
+tally yang mencatat iuran main badminton (RFC-004 di tally). Di **Kelola → Integrasi**,
+pemilik membuat token dengan sebuah nama (mis. `tally`). Halaman ini terlalu teknis untuk
+kebanyakan pengguna, jadi hanya muncul bila pemiliknya juga **admin All-in-one** (dicek ke
+aio setiap kali, seperti halaman admin); pengguna lain mendapat 404 dan tidak melihat
+tombolnya. Tanpa All-in-one (`AUTH_PROVIDER=local`) halaman ini tidak tersedia. Token hanya ditampilkan sekali;
+database hanya menyimpan hash SHA-256-nya. Satu cashplan boleh punya 5 token aktif, dan
+token bisa dicabut kapan saja.
+
+Token hanya bisa **menambah pemasukan**: tidak bisa membaca cashplan, mengubah transaksi,
+atau menambah pengeluaran. Transaksinya tunduk pada aturan append-only yang sama, dan
+halaman detailnya menyebut nama integrasi yang mencatatnya.
+
+```http
+POST /api/v1/plans/{slug}/entries
+Authorization: Bearer cfl_...
+Content-Type: application/json
+
+{"key": "tally:42:1", "party": "Mabar Minggu", "amount": 1050000,
+ "date": "2026-11-02", "description": "21 × Rp50.000 (18 tunai, 3 transfer)"}
+```
+
+| Field | Wajib | Isi |
+| --- | --- | --- |
+| `key` | ya | Kunci idempotensi buatan pengirim, unik per cashplan; maks 200 karakter ASCII tanpa spasi |
+| `party` | ya | Pembayar, maks 200 karakter |
+| `amount` | ya | Rupiah bulat, lebih dari 0 |
+| `date` | tidak | `YYYY-MM-DD`; kosong = hari ini (WIB) |
+| `description` | tidak | Catatan, maks 1000 karakter |
+
+Field lain ditolak. Jawabannya memakai bentuk yang sama dengan API All-in-one:
+
+```json
+{"success": true, "message": null, "error": null,
+ "data": {"id": "…", "url": "https://…/p/{slug}/entry/…", "amount": 1050000,
+          "date": "2026-11-02", "created": true}}
+```
+
+- **`201`**: transaksi baru (`created: true`).
+- **`200`**: `key` ini sudah pernah dipakai dengan jumlah yang sama. Tidak ada transaksi
+  baru, dan `data` berisi transaksi yang pertama, jadi pengirim aman mengulang kiriman.
+- **`409 key_conflict`**: `key` sudah dipakai dengan jumlah lain. Jumlah tidak pernah berubah.
+- **`401 missing_token` / `invalid_token`**: token tidak ada, salah, sudah dicabut, atau
+  bukan untuk cashplan ini.
+- **`400`** `invalid_json`, `invalid_key`, `invalid_amount`, `invalid_party`,
+  `invalid_description`, `invalid_date`; **`413 too_large`** (lebih dari 16 KiB);
+  **`429 rate_limited`** (bila rate limit All-in-one aktif, per token).
+
 ## Model akses (design decision)
 
 - **Kepemilikan = akun.** Setiap cashplan dimiliki oleh user yang membuatnya. Untuk
@@ -379,6 +431,8 @@ Kejujuran data ditegakkan di level **database** oleh trigger `entries_guard`:
    **riwayat versi tetap utuh dan terlihat semua orang** (label "telah diperbarui" +
    timeline versi pada tiap catatan).
 3. `entry_revisions` sendiri append-only (tidak bisa di-`UPDATE`/`DELETE`).
+4. Transaksi dari API (integrasi) menyimpan token dan `key` pengirimnya selamanya;
+   keduanya juga terkunci.
 
 Semua aturan ini berlaku bahkan dari luar aplikasi (mis. via `psql`) — mencoba
 mengubah amount/type atau menghapus entri akan ditolak database.
@@ -391,6 +445,7 @@ handlers.go        HTTP handler + rendering template
 auth.go            Hash kata sandi (bcrypt), sesi cookie, middleware user
 aioauth.go         Login lewat All-in-one (OpenID Connect): /auth/login, /auth/callback, logout
 store.go           Lapisan akses data (users, sessions, cashplans, entries)
+linkapi.go         Token integrasi, halaman Integrasi, dan API untuk aplikasi lain
 slug.go            Normalisasi & validasi slug
 money.go           Parsing & format Rupiah, format tanggal Indonesia
 schema.sql         Skema DB (diterapkan otomatis saat start)
@@ -408,8 +463,10 @@ sessions(id, user_id, created_at, expires_at, id_token /* untuk logout di aio */
 cashplans(id, owner_id, slug, title, description, created_at)
 entries(id, cashplan_id, type['income'|'expense'], party, description,
         amount /* whole rupiah, immutable */, occurred_at, created_at,
-        attachment_url, attachment_name)
+        attachment_url, attachment_name,
+        link_token_id, source_key /* dari API; terkunci */)
 entry_revisions(id, entry_id, party, description, occurred_at, revised_at)
+link_tokens(id, cashplan_id, name, token_hash /* SHA-256 */, created_at, last_used_at, revoked_at)
 ```
 
 `party` = pembayar (income) / penerima (expense). `description` = catatan (income)
@@ -421,3 +478,5 @@ entry_revisions(id, entry_id, party, description, occurred_at, revised_at)
   sesuai kebiasaan IDR — sehingga tidak ada galat pembulatan floating-point.
 - Tanggal default memakai zona waktu `Asia/Jakarta` (WIB).
 - Reset total (hapus semua data): `docker compose down -v`.
+- Tes: `go test -race ./...`. Tes yang butuh database hanya jalan bila
+  `CASHFLOW_TEST_DATABASE_URL` diisi (database kosong khusus tes; skema diterapkan otomatis).
