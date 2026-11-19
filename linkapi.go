@@ -18,8 +18,10 @@ import (
 
 // Link tokens let another app (tally, for RFC-004) add income entries to one
 // cashplan through POST /api/v1/plans/{slug}/entries. The owner creates and
-// revokes them on /kelola/{slug}/integrasi. A token can only add income: it
-// cannot read the cashplan, edit an entry or add an expense.
+// revokes them on /kelola/{slug}/integrasi, which is only for owners who are
+// also aio admins: it is too technical for everyone else, so they never see
+// it. A token can only add income: it cannot read the cashplan, edit an entry
+// or add an expense.
 
 const (
 	linkTokenPrefix  = "cfl_"
@@ -187,8 +189,23 @@ type integrasiVM struct {
 	Err       string
 }
 
+// adminOwnedPlan is ownedPlan for aio admins only. Everyone else gets 404,
+// like any cashplan that isn't theirs, so the page isn't advertised.
+func (a *App) adminOwnedPlan(w http.ResponseWriter, r *http.Request) *CashPlan {
+	u := a.requireAdmin(w, r)
+	if u == nil {
+		return nil
+	}
+	plan, err := a.store.PlanBySlug(r.Context(), r.PathValue("slug"))
+	if err != nil || plan.OwnerID != u.ID {
+		a.notFound(w, r)
+		return nil
+	}
+	return plan
+}
+
 func (a *App) handleIntegrasi(w http.ResponseWriter, r *http.Request) {
-	plan := a.ownedPlan(w, r)
+	plan := a.adminOwnedPlan(w, r)
 	if plan == nil {
 		return
 	}
@@ -212,7 +229,7 @@ func (a *App) renderIntegrasi(w http.ResponseWriter, r *http.Request, plan *Cash
 }
 
 func (a *App) handleCreateLinkToken(w http.ResponseWriter, r *http.Request) {
-	plan := a.ownedPlan(w, r)
+	plan := a.adminOwnedPlan(w, r)
 	if plan == nil {
 		return
 	}
@@ -247,7 +264,7 @@ func (a *App) handleCreateLinkToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleRevokeLinkToken(w http.ResponseWriter, r *http.Request) {
-	plan := a.ownedPlan(w, r)
+	plan := a.adminOwnedPlan(w, r)
 	if plan == nil {
 		return
 	}

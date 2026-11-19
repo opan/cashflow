@@ -86,7 +86,7 @@ Variabel lain (unggah lampiran ke Nextcloud, rate limiting, metrik OpenTelemetry
 | `POST /cashplans`            | login                    | Buat cashplan (title, slug, description)  |
 | `GET  /kelola/{slug}`        | pemilik                  | Kelola: tambah transaksi, ringkasan, bagikan |
 | `POST /kelola/{slug}/entry`  | pemilik                  | Tambah transaksi (income/expense)         |
-| `GET/POST /kelola/{slug}/integrasi` | pemilik           | Integrasi: buat dan cabut token untuk aplikasi lain |
+| `GET/POST /kelola/{slug}/integrasi` | pemilik + admin aio | Integrasi: buat dan cabut token untuk aplikasi lain |
 | `POST /api/v1/plans/{slug}/entries` | token integrasi   | API: aplikasi lain menambah pemasukan (lihat [Integrasi](#integrasi-api-untuk-aplikasi-lain)) |
 | `GET  /p/{slug}`             | siapa pun dengan tautan  | Lihat (baca-saja) ringkasan & riwayat     |
 | `GET  /admin`                | admin aio                | Admin (baca-saja): aktivitas semua pengguna, tanpa nominal |
@@ -359,7 +359,10 @@ oleh cashflow (RFC-002 di all-in-one):
 
 Pemilik bisa mengizinkan aplikasi lain menambah **pemasukan** ke satu cashplan, mis.
 tally yang mencatat iuran main badminton (RFC-004 di tally). Di **Kelola → Integrasi**,
-pemilik membuat token dengan sebuah nama (mis. `tally`). Token hanya ditampilkan sekali;
+pemilik membuat token dengan sebuah nama (mis. `tally`). Halaman ini terlalu teknis untuk
+kebanyakan pengguna, jadi hanya muncul bila pemiliknya juga **admin All-in-one** (dicek ke
+aio setiap kali, seperti halaman admin); pengguna lain mendapat 404 dan tidak melihat
+tombolnya. Tanpa All-in-one (`AUTH_PROVIDER=local`) halaman ini tidak tersedia. Token hanya ditampilkan sekali;
 database hanya menyimpan hash SHA-256-nya. Satu cashplan boleh punya 5 token aktif, dan
 token bisa dicabut kapan saja.
 

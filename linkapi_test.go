@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -38,9 +40,9 @@ type linkFixture struct {
 	app     *App
 	srv     http.Handler
 	plan    *CashPlan
-	other   *CashPlan // another user's cashplan
-	cookie  *http.Cookie
-	cookie2 *http.Cookie // the other user
+	other   *CashPlan    // another user's cashplan
+	cookie  *http.Cookie // the owner of plan, an aio admin
+	cookie2 *http.Cookie // the owner of other, not an aio admin
 }
 
 func newLinkFixture(t *testing.T) *linkFixture {
@@ -48,19 +50,26 @@ func newLinkFixture(t *testing.T) *linkFixture {
 	s := testStore(t)
 	ctx := context.Background()
 	suffix := strings.ToLower(newToken()[:10])
-	mkUser := func(name string) (*User, *http.Cookie) {
-		u, err := s.CreateUser(ctx, name+"-"+suffix, "x")
+	adminID := uuid.NewString()
+	// aio says only adminID is an admin.
+	aioSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		admin := strings.Contains(r.URL.Path, "/"+adminID+"/")
+		fmt.Fprintf(w, `{"success":true,"data":{"admin":%t,"blocked":false}}`, admin)
+	}))
+	t.Cleanup(aioSrv.Close)
+	mkUser := func(name, aioID string, admin bool) (*User, *http.Cookie) {
+		u, err := s.CreateAioUser(ctx, aioID, name+"-"+suffix)
 		if err != nil {
 			t.Fatal(err)
 		}
 		tok := newToken() + newToken()
-		if err := s.CreateSession(ctx, tok, u.ID, time.Now().Add(time.Hour), "", false); err != nil {
+		if err := s.CreateSession(ctx, tok, u.ID, time.Now().Add(time.Hour), "", admin); err != nil {
 			t.Fatal(err)
 		}
 		return u, &http.Cookie{Name: sessionCookie, Value: tok}
 	}
-	u1, c1 := mkUser("owner")
-	u2, c2 := mkUser("other")
+	u1, c1 := mkUser("owner", adminID, true)
+	u2, c2 := mkUser("other", uuid.NewString(), false)
 	plan, err := s.CreatePlan(ctx, u1.ID, "kas-"+suffix, "Kas Badminton Sampai Pingsan", "")
 	if err != nil {
 		t.Fatal(err)
@@ -69,8 +78,10 @@ func newLinkFixture(t *testing.T) *linkFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	app := &App{store: s, tmpl: buildTemplates(), guard: newSubmitGuard(time.Hour)}
+	app := &App{store: s, tmpl: buildTemplates(), guard: newSubmitGuard(time.Hour),
+		aio: &AioAuth{enabled: true, internalURL: aioSrv.URL, httpClient: &http.Client{Timeout: time.Second}}}
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /kelola/{slug}", app.handleManage)
 	mux.HandleFunc("GET /kelola/{slug}/integrasi", app.handleIntegrasi)
 	mux.HandleFunc("POST /kelola/{slug}/integrasi", app.handleCreateLinkToken)
 	mux.HandleFunc("POST /kelola/{slug}/integrasi/{id}/revoke", app.handleRevokeLinkToken)
@@ -336,6 +347,24 @@ func TestIntegrasiPage(t *testing.T) {
 	}
 	if rec := f.do(t, http.MethodGet, path, "", func(r *http.Request) { r.AddCookie(f.cookie2) }); rec.Code != http.StatusNotFound {
 		t.Fatalf("another user's cashplan: %d", rec.Code)
+	}
+	// Not for owners who aren't aio admins: no page, no button, no tokens.
+	otherPath := "/kelola/" + f.other.Slug + "/integrasi"
+	if rec := f.do(t, http.MethodGet, otherPath, "", func(r *http.Request) { r.AddCookie(f.cookie2) }); rec.Code != http.StatusNotFound {
+		t.Fatalf("owner who isn't an aio admin: %d", rec.Code)
+	}
+	if rec := f.form(t, f.cookie2, otherPath, url.Values{"name": {"tally"}}); rec.Code != http.StatusNotFound {
+		t.Fatalf("token created by an owner who isn't an aio admin: %d", rec.Code)
+	}
+	if rec := f.do(t, http.MethodGet, "/kelola/"+f.other.Slug, "", func(r *http.Request) { r.AddCookie(f.cookie2) }); rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), "/integrasi") {
+		t.Fatalf("manage page for a non-admin: %d, shows Integrasi: %t", rec.Code, strings.Contains(rec.Body.String(), "/integrasi"))
+	}
+	// An aio admin still needs to own the cashplan.
+	if rec := f.do(t, http.MethodGet, otherPath, "", func(r *http.Request) { r.AddCookie(f.cookie) }); rec.Code != http.StatusNotFound {
+		t.Fatalf("admin on someone else's cashplan: %d", rec.Code)
+	}
+	if rec := f.do(t, http.MethodGet, "/kelola/"+f.plan.Slug, "", func(r *http.Request) { r.AddCookie(f.cookie) }); !strings.Contains(rec.Body.String(), path) {
+		t.Fatal("manage page for an admin doesn't show Integrasi")
 	}
 
 	rec := f.form(t, f.cookie, path, url.Values{"name": {"tally"}, "form_token": {"ft1"}})

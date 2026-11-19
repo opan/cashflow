@@ -90,7 +90,7 @@ Other variables (Nextcloud attachment uploads, rate limiting, OpenTelemetry metr
 | `POST /cashplans`            | logged in                | Create cashplan (title, slug, description)  |
 | `GET  /kelola/{slug}`        | owner                    | Manage: add transactions, summary, share    |
 | `POST /kelola/{slug}/entry`  | owner                    | Add transaction (income/expense)            |
-| `GET/POST /kelola/{slug}/integrasi` | owner             | Integrations: create and revoke tokens for other apps |
+| `GET/POST /kelola/{slug}/integrasi` | owner + aio admin | Integrations: create and revoke tokens for other apps |
 | `POST /api/v1/plans/{slug}/entries` | link token        | API: another app adds income (see [Integrations](#integrations-api-for-other-apps)) |
 | `GET  /p/{slug}`             | anyone with the link     | View (read-only) summary & history          |
 | `GET  /admin`                | aio admin                | Admin (read-only): every user's activity, no amounts |
@@ -362,7 +362,10 @@ Only with `AUTH_PROVIDER=aio`. All-in-one decides who is an admin (its `admin` g
 
 An owner can let another app add **income** to one cashplan, e.g. tally recording the
 fees for a badminton play day (RFC-004 in tally). In **Kelola → Integrasi** the owner
-creates a token with a name (e.g. `tally`). The token is shown once; the database keeps
+creates a token with a name (e.g. `tally`). The page is too technical for most users, so
+it's there only when the owner is also an **All-in-one admin** (asked of aio on every
+request, like the admin pages); everyone else gets 404 and doesn't see the button.
+Without All-in-one (`AUTH_PROVIDER=local`) the page isn't available. The token is shown once; the database keeps
 only its SHA-256 hash. A cashplan can have 5 active tokens, and a token can be revoked
 at any time.
 
